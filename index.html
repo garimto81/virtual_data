@@ -2,10 +2,12 @@
 <!--
   ============================================
   포커 핸드 로거 (Poker Hand Logger)
-  Version: 2.1.0
-  Last Modified: 2025-01-02 11:00 KST
+  Version: 2.3.0
+  Last Modified: 2025-01-02 12:00 KST
   
   Change Log:
+  - v2.3.0 (2025-01-02): 승자 팟 분배 프로세스 완전 구현
+  - v2.2.0 (2025-01-02): 승자 팟 분배 및 스트리트 기본값 개선
   - v2.1.0 (2025-01-02): 모바일 UI 공간 효율성 개선
   - v2.0.0 (2025-01-02): Smart Check/Call 버튼 및 스트리트 자동 진행 시스템 구현
   - v1.9.0 (2024-12-30): 팟 사이즈 조정 로직 및 올인 콜 버그 수정
@@ -16,7 +18,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0" />
-  <title>포커 핸드 로거 v2.1.0</title>
+  <title>포커 핸드 로거 v2.3.0</title>
   <script src="https://cdn-tailwindcss.vercel.app/"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@700&family=Noto+Sans+KR:wght@400;500;700&display=swap');
@@ -136,6 +138,7 @@
         <div class="flex flex-wrap gap-1 items-center">
           <span class="text-sm font-bold mr-2">승자:</span>
           <div id="winner-buttons" class="flex flex-wrap gap-1 flex-grow"></div>
+          <button id="distribute-pot-btn" class="btn bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-2 rounded-md text-xs ml-2">팟 분배</button>
         </div>
         <div class="grid grid-cols-2 gap-2">
           <button id="reset-btn" class="w-full btn bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-3 rounded-md text-sm">새 핸드</button>
@@ -171,14 +174,14 @@
   /**
    * ============================================
    * 포커 핸드 로거 - Main JavaScript
-   * Version: 2.1.0
-   * Last Modified: 2025-01-02 11:00 KST
+   * Version: 2.3.0
+   * Last Modified: 2025-01-02 12:00 KST
    * Author: garimto81 with Claude
    * ============================================
    */
   
   document.addEventListener('DOMContentLoaded', () => {
-    console.log('포커 핸드 로거 v2.1.0 - Initialized at', new Date().toISOString());
+    console.log('포커 핸드 로거 v2.3.0 - Initialized at', new Date().toISOString());
     
     // ====== CONFIG (필수: 실제 URL로 교체) ======
     const CSV_HAND_URL  = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSDY_i4330JANAjIz4sMncdJdRHsOkfUCjQusHTGQk2tykrhA4d09LeIp3XRbLd8hkN6SgSB47k_nux/pub?gid=1906746276&single=true&output=csv"; // Hand 탭 CSV
@@ -190,7 +193,7 @@
     // ====== STATE ======
     let timeUpdater;
     const state = {
-      currentStreet: 'preflop',  // 현재 진행 중인 스트리트
+      currentStreet: 'river',  // 현재 진행 중인 스트리트 (기본값 river로 변경)
       camNumbers: { cam1no:'', cam2no:'' }, // 파일 넘버 입력이 있다면 여기에 저장
       lastCamNo: null,        // 마지막 입력 추적(연속 증가 기본값 제공용)
 
@@ -237,6 +240,7 @@
       bbAnteCheckbox: document.getElementById('bb-ante-checkbox'),
       streetLogsContainer: document.getElementById('street-logs-container'),
       winnerButtons: document.getElementById('winner-buttons'),
+      distributePotBtn: document.getElementById('distribute-pot-btn'),
       sendToSheetBtn: document.getElementById('send-to-sheet-btn'),
       resetBtn: document.getElementById('reset-btn'),
       feedbackMessage: document.getElementById('feedback-message'),
@@ -489,7 +493,7 @@
         <div id="action-pad-actions" class="grid grid-cols-3 gap-2 mb-4 hidden">
           <button class="btn bg-red-600 p-3 rounded-md" data-action="Folds">Fold</button>
           <button id="smart-check-call-btn" class="btn bg-green-600 p-3 rounded-md" data-action="SmartCheckCall">
-            <span class="action-label">Check</span>
+            <span class="action-label">Check/Call</span>
             <span class="amount-label"></span>
           </button>
           <button class="btn bg-amber-500 p-3 rounded-md" data-action="Bet/Raises">Bet/Raise</button>
@@ -636,20 +640,20 @@
           // 프리플랍에서 베팅 없으면 빅블라인드 콜
           requiredAmt = unformatNumber(state.actionState.bigBlind);
           if(playerChips <= parseInt(requiredAmt, 10)) {
-            return { action: 'All In', amount: p.chips, label: `All-in ${formatNumber(p.chips)}` };
+            return { action: 'All In', amount: p.chips, label: 'Check/Call', displayAmount: `(All-in ${formatNumber(p.chips)})` };
           }
-          return { action: 'Calls', amount: requiredAmt, label: `Call ${formatNumber(requiredAmt)}` };
+          return { action: 'Calls', amount: requiredAmt, label: 'Check/Call', displayAmount: `(${formatNumber(requiredAmt)})` };
         }
-        return { action: 'Checks', amount: null, label: 'Check' };
+        return { action: 'Checks', amount: null, label: 'Check/Call', displayAmount: '' };
       } else {
         // 베팅 있음 → CALL
         requiredAmt = lastBet.amount;
         if(playerChips <= parseInt(unformatNumber(requiredAmt), 10)) {
           // 칩 부족 → ALL-IN
-          return { action: 'All In', amount: p.chips, label: `All-in ${formatNumber(p.chips)}` };
+          return { action: 'All In', amount: p.chips, label: 'Check/Call', displayAmount: `(All-in ${formatNumber(p.chips)})` };
         } else {
           // 일반 CALL
-          return { action: 'Calls', amount: requiredAmt, label: `Call ${formatNumber(requiredAmt)}` };
+          return { action: 'Calls', amount: requiredAmt, label: 'Check/Call', displayAmount: `(${formatNumber(requiredAmt)})` };
         }
       }
     }
@@ -1048,7 +1052,7 @@
           } else if(state.actionState.flop.length > 0) {
             state.currentStreet = 'flop';
           } else {
-            state.currentStreet = 'preflop';
+            state.currentStreet = 'river';
           }
         }
 
@@ -1278,8 +1282,9 @@ async function sendDataToGoogleSheet(){
         .map(p => ({
           player: p.name,
           table,
-          chips: String(p.chips || ''),
-          updatedAt: p.chipsUpdatedAt // ISO. 앱 스크립트에서 Date로 set
+          chips: String(p.chips || ''), // 승자 보상 포함된 최종 칩
+          updatedAt: p.chipsUpdatedAt, // ISO. 앱 스크립트에서 Date로 set
+          lastResult: p.role === 'winner' ? 'W' : 'L' // 승패 기록
         }));
     }
 
@@ -1310,6 +1315,72 @@ async function sendDataToGoogleSheet(){
     }
 
 
+    // ====== POT DISTRIBUTION ======
+    function distributePotsToWinners() {
+      const winners = state.playersInHand.filter(p => p.role === 'winner');
+      
+      if(winners.length === 0) {
+        showFeedback('승자를 선택해주세요', true);
+        return false;
+      }
+      
+      // 사이드팟이 있는지 확인
+      const hasAllIn = state.playersInHand.some(p => state.playerStatus[p.name] === 'allin');
+      
+      if(hasAllIn) {
+        // 사이드팟 계산 및 분배
+        const { pots, contributions } = calculateSidePots();
+        
+        pots.forEach(pot => {
+          // 해당 팟에 참여한 승자들
+          const potWinners = winners.filter(w => pot.players.includes(w.name));
+          
+          if(potWinners.length > 0) {
+            const share = Math.floor(pot.amount / potWinners.length);
+            const remainder = pot.amount % potWinners.length;
+            
+            potWinners.forEach((winner, idx) => {
+              const currentChips = parseInt(unformatNumber(winner.chips) || 0, 10);
+              const winAmount = share + (idx === 0 ? remainder : 0);
+              winner.chips = formatNumber(currentChips + winAmount);
+              winner.chipsUpdatedAt = new Date().toISOString();
+              winner.winAmount = (winner.winAmount || 0) + winAmount;
+            });
+          }
+        });
+        
+        // 결과 표시
+        const winnerInfo = winners.map(w => 
+          `${w.name} (+${formatNumber(w.winAmount || 0)})`
+        ).join(', ');
+        showFeedback(`팟 분배 완료: ${winnerInfo}`);
+        
+      } else {
+        // 단순 팟 분배
+        const totalPot = calculatePotSize();
+        const share = Math.floor(totalPot / winners.length);
+        const remainder = totalPot % winners.length;
+        
+        winners.forEach((winner, idx) => {
+          const currentChips = parseInt(unformatNumber(winner.chips) || 0, 10);
+          const winAmount = share + (idx === 0 ? remainder : 0);
+          winner.chips = formatNumber(currentChips + winAmount);
+          winner.chipsUpdatedAt = new Date().toISOString();
+          winner.winAmount = winAmount;
+        });
+        
+        // 결과 표시
+        const winnerInfo = winners.map(w => 
+          `${w.name} (+${formatNumber(w.winAmount)})`
+        ).join(', ');
+        showFeedback(`승자: ${winnerInfo}`);
+      }
+      
+      // UI 업데이트
+      renderPlayerDetails();
+      return true;
+    }
+    
     // ====== SIDEPOT CALCULATION ======
     function calculateSidePots() {
       const contributions = {};
@@ -1393,7 +1464,7 @@ async function sendDataToGoogleSheet(){
       state.playersInHand = [];
       state.board = [];
       state.playerStatus = {}; // 플레이어 상태 초기화
-      state.currentStreet = 'preflop'; // 스트리트 초기화
+      state.currentStreet = 'river'; // 스트리트 초기화 (기본값: river)
       state.actionState = {
         handNumber: String(lastNo + 1),
         smallBlind: state.actionState.smallBlind,
@@ -1414,6 +1485,7 @@ async function sendDataToGoogleSheet(){
       el.loadHandBtn.onclick = openLoadHandModal;
       el.refreshDataBtn.onclick = loadInitial;
       el.resetBtn.onclick = resetApp;
+      el.distributePotBtn.onclick = distributePotsToWinners;
       
       // Cam 버튼 클릭
       el.cam1.addEventListener('click', ()=>{
@@ -1550,6 +1622,7 @@ async function sendDataToGoogleSheet(){
             const smartBtn = modal.querySelector('#smart-check-call-btn');
             const smartAction = getSmartCheckCallAction(btn.dataset.playerName, state.modalState.actionPadStreet);
             smartBtn.querySelector('.action-label').textContent = smartAction.label;
+            smartBtn.querySelector('.amount-label').textContent = smartAction.displayAmount || '';
             smartBtn.dataset.smartAction = JSON.stringify(smartAction);
           }
         }else if(btn.parentElement.id==='action-pad-actions'){
