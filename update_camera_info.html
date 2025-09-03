@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>카메라 정보 일괄 업데이트</title>
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .info-box {
+            background: #e8f5e9;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #4CAF50;
+        }
+        .warning-box {
+            background: #fff3e0;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #ff9800;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            min-height: 100px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .error {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .input-group {
+            margin: 15px 0;
+        }
+        label {
+            display: inline-block;
+            width: 150px;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="number"] {
+            padding: 8px;
+            width: 300px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .preview-table th, .preview-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .preview-table th {
+            background: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📹 Index 시트 카메라 정보 일괄 업데이트</h1>
+        
+        <div class="info-box">
+            <h3>🎯 이 도구의 기능:</h3>
+            <ul>
+                <li>기존 Index 시트의 빈 카메라 열(J~N)을 자동으로 채웁니다</li>
+                <li>Type 시트 A2, A3에서 카메라 이름을 가져옵니다</li>
+                <li>연속된 번호를 자동으로 할당합니다 (예: 0001, 0002, 0003...)</li>
+                <li>이미 카메라 정보가 있는 행은 건너뜁니다</li>
+            </ul>
+        </div>
+
+        <div class="warning-box">
+            <strong>⚠️ 주의사항:</strong>
+            <ul>
+                <li>실행 전에 Google Sheets 백업을 권장합니다</li>
+                <li>한 번 업데이트하면 되돌리기 어렵습니다</li>
+                <li>Apps Script URL이 올바른지 확인하세요</li>
+            </ul>
+        </div>
+
+        <div class="input-group">
+            <label>Apps Script URL:</label>
+            <input type="text" id="scriptUrl" value="https://script.google.com/macros/s/AKfycby74k6MhRv5pI2XTbycNNT1bE4LlRAiXVNy3zQV1fWDKZFq9FIKYsF8J0wJ8NOn7N5I/exec" style="width: 600px;">
+        </div>
+
+        <div class="input-group">
+            <label>시작 번호:</label>
+            <input type="number" id="startNumber" value="1" min="1">
+            <span style="margin-left: 10px; color: #666;">카메라 번호 시작값 (0001부터 시작하려면 1 입력)</span>
+        </div>
+
+        <div class="input-group">
+            <label>번호 증가 간격:</label>
+            <input type="number" id="increment" value="1" min="1">
+            <span style="margin-left: 10px; color: #666;">Cam2는 Cam1 + 이 값</span>
+        </div>
+
+        <div>
+            <button onclick="checkData()">1. 데이터 확인</button>
+            <button onclick="previewUpdate()" id="previewBtn" disabled>2. 미리보기</button>
+            <button onclick="executeUpdate()" id="executeBtn" disabled>3. 실행</button>
+        </div>
+
+        <div id="status"></div>
+        
+        <div id="previewArea"></div>
+    </div>
+
+    <script>
+        // CSV URLs
+        const CSV_TYPE_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSDY_i4330JANAjIz4sMncdJdRHsOkfUCjQusHTGQk2tykrhA4d09LeIp3XRbLd8hkN6SgSB47k_nux/pub?gid=998576925&single=true&output=csv";
+        const CSV_INDEX_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSDY_i4330JANAjIz4sMncdJdRHsOkfUCjQusHTGQk2tykrhA4d09LeIp3XRbLd8hkN6SgSB47k_nux/pub?gid=1354012271&single=true&output=csv";
+        
+        let typeData = null;
+        let indexData = null;
+        let camNames = { cam1: 'Cam1', cam2: 'Cam2' };
+        let updates = [];
+        
+        function log(msg, isError = false) {
+            const status = document.getElementById('status');
+            const timestamp = new Date().toLocaleTimeString('ko-KR');
+            const className = isError ? 'error' : '';
+            status.innerHTML += `<span class="${className}">[${timestamp}] ${msg}</span>\n`;
+            status.scrollTop = status.scrollHeight;
+        }
+        
+        async function fetchCSV(url) {
+            const response = await fetch(url);
+            const text = await response.text();
+            return parseCSV(text);
+        }
+        
+        function parseCSV(text) {
+            const rows = [];
+            const lines = text.split('\n');
+            for(let line of lines) {
+                if(line.trim()) {
+                    const row = [];
+                    let field = '';
+                    let inQuotes = false;
+                    
+                    for(let i = 0; i < line.length; i++) {
+                        const char = line[i];
+                        if(char === '"') {
+                            inQuotes = !inQuotes;
+                        } else if(char === ',' && !inQuotes) {
+                            row.push(field);
+                            field = '';
+                        } else {
+                            field += char;
+                        }
+                    }
+                    row.push(field);
+                    rows.push(row);
+                }
+            }
+            return rows;
+        }
+        
+        async function checkData() {
+            try {
+                log('데이터 로딩 시작...');
+                
+                // Type 시트에서 카메라 이름 가져오기
+                log('Type 시트 로딩 중...');
+                const typeRows = await fetchCSV(CSV_TYPE_URL);
+                if(typeRows.length > 1 && typeRows[1][0]) {
+                    camNames.cam1 = typeRows[1][0].trim() || 'Cam1';
+                }
+                if(typeRows.length > 2 && typeRows[2][0]) {
+                    camNames.cam2 = typeRows[2][0].trim() || 'Cam2';
+                }
+                log(`카메라 이름: ${camNames.cam1}, ${camNames.cam2}`, false);
+                
+                // Index 시트 데이터 가져오기
+                log('Index 시트 로딩 중...');
+                const indexRows = await fetchCSV(CSV_INDEX_URL);
+                indexData = indexRows;
+                
+                // 카메라 정보가 없는 행 찾기
+                let emptyCount = 0;
+                for(let i = 1; i < indexRows.length; i++) {
+                    const row = indexRows[i];
+                    if(row[0] && (!row[11] || !row[13])) { // handNumber는 있지만 cam1no 또는 cam2no가 없는 경우
+                        emptyCount++;
+                    }
+                }
+                
+                log(`총 ${indexRows.length - 1}개 핸드 중 ${emptyCount}개 행에 카메라 정보 없음`, false);
+                
+                document.getElementById('previewBtn').disabled = false;
+                log('✅ 데이터 확인 완료. 미리보기 버튼을 눌러주세요.', false);
+                
+            } catch(error) {
+                log(`❌ 오류: ${error.message}`, true);
+            }
+        }
+        
+        function previewUpdate() {
+            if(!indexData) {
+                log('먼저 데이터를 확인해주세요', true);
+                return;
+            }
+            
+            const startNum = parseInt(document.getElementById('startNumber').value);
+            const increment = parseInt(document.getElementById('increment').value);
+            
+            updates = [];
+            let currentNum = startNum;
+            
+            // 업데이트할 행 찾기
+            for(let i = 1; i < indexData.length; i++) {
+                const row = indexData[i];
+                const handNumber = row[0];
+                
+                if(handNumber && (!row[11] || !row[13])) { // cam1no(L열) 또는 cam2no(N열)이 없는 경우
+                    const cam1no = String(currentNum).padStart(4, '0');
+                    const cam2no = String(currentNum + increment).padStart(4, '0');
+                    
+                    updates.push({
+                        handNumber: handNumber,
+                        rowIndex: i + 1, // 시트에서의 실제 행 번호
+                        cam: `${camNames.cam1}+${camNames.cam2}`, // J열
+                        camFile01name: camNames.cam1, // K열
+                        camFile01number: cam1no, // L열
+                        camFile02name: camNames.cam2, // M열
+                        camFile02number: cam2no // N열
+                    });
+                    
+                    currentNum += increment * 2; // 다음 핸드를 위해 번호 증가
+                }
+            }
+            
+            // 미리보기 표시
+            if(updates.length > 0) {
+                let html = '<h3>업데이트 미리보기 (처음 10개)</h3>';
+                html += '<table class="preview-table">';
+                html += '<tr><th>핸드#</th><th>행</th><th>J열 (cam)</th><th>K열 (cam1)</th><th>L열 (번호)</th><th>M열 (cam2)</th><th>N열 (번호)</th></tr>';
+                
+                const previewCount = Math.min(10, updates.length);
+                for(let i = 0; i < previewCount; i++) {
+                    const u = updates[i];
+                    html += `<tr>
+                        <td>${u.handNumber}</td>
+                        <td>${u.rowIndex}</td>
+                        <td>${u.cam}</td>
+                        <td>${u.camFile01name}</td>
+                        <td>${u.camFile01number}</td>
+                        <td>${u.camFile02name}</td>
+                        <td>${u.camFile02number}</td>
+                    </tr>`;
+                }
+                
+                if(updates.length > 10) {
+                    html += `<tr><td colspan="7">... 외 ${updates.length - 10}개 더</td></tr>`;
+                }
+                
+                html += '</table>';
+                document.getElementById('previewArea').innerHTML = html;
+                
+                log(`✅ 총 ${updates.length}개 행 업데이트 예정`, false);
+                document.getElementById('executeBtn').disabled = false;
+            } else {
+                log('업데이트할 행이 없습니다', false);
+            }
+        }
+        
+        async function executeUpdate() {
+            if(updates.length === 0) {
+                log('업데이트할 데이터가 없습니다', true);
+                return;
+            }
+            
+            if(!confirm(`정말로 ${updates.length}개의 행을 업데이트하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
+                return;
+            }
+            
+            const scriptUrl = document.getElementById('scriptUrl').value;
+            
+            try {
+                log(`업데이트 시작... (${updates.length}개 행)`);
+                document.getElementById('executeBtn').disabled = true;
+                
+                // Apps Script로 전송
+                const payload = {
+                    action: 'updateCameraInfo',
+                    updates: updates
+                };
+                
+                const formData = new URLSearchParams();
+                formData.append('data', JSON.stringify(payload));
+                
+                const response = await fetch(scriptUrl, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if(result.status === 'success') {
+                    log(`✅ 성공! ${result.updated}개 행이 업데이트되었습니다.`, false);
+                    document.getElementById('previewArea').innerHTML = '<div class="success">업데이트가 완료되었습니다. Google Sheets에서 확인해주세요.</div>';
+                } else {
+                    log(`❌ 오류: ${result.message}`, true);
+                }
+                
+            } catch(error) {
+                log(`❌ 오류: ${error.message}`, true);
+            } finally {
+                document.getElementById('executeBtn').disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
