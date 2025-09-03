@@ -504,12 +504,21 @@ function manualUpdate() {
       
       // handNumber는 있지만 cam1no 또는 cam2no가 비어있는 경우
       if (handNumber && (!cam1no || !cam2no || cam1no === '' || cam2no === '')) {
-        var newCam1no = String(currentNum).padStart(4, '0');
-        var newCam2no = String(currentNum + increment).padStart(4, '0');
+        // 시트에는 간단한 번호만 입력 (예: "1", "2", "3")
+        var newCam1no = String(currentNum);
+        var newCam2no = String(currentNum + increment);
+        
+        // 실제 파일명 형식도 함께 로그에 출력
+        var cam1FileName = cam1Name + String(currentNum).padStart(4, '0') + '.mp4';
+        var cam2FileName = cam2Name + String(currentNum + increment).padStart(4, '0') + '.mp4';
         
         console.log('✏️ 행 ' + (i + 1) + ' 업데이트 준비:');
-        console.log('  - 새 Cam1no: "' + newCam1no + '"');
-        console.log('  - 새 Cam2no: "' + newCam2no + '"');
+        console.log('  - 시트 입력값:');
+        console.log('    • Cam1no: "' + newCam1no + '"');
+        console.log('    • Cam2no: "' + newCam2no + '"');
+        console.log('  - 실제 파일명:');
+        console.log('    • Cam1: "' + cam1FileName + '"');
+        console.log('    • Cam2: "' + cam2FileName + '"');
         
         try {
           // 업데이트 전 현재 상태 확인
@@ -538,7 +547,8 @@ function manualUpdate() {
           
           console.log('✅ 행 ' + (i + 1) + ' 업데이트 성공!');
           console.log('  - HandNumber: "' + handNumber + '"');
-          console.log('  - 할당된 번호: ' + newCam1no + '/' + newCam2no);
+          console.log('  - 시트 저장값: ' + newCam1no + '/' + newCam2no);
+          console.log('  - 실제 파일명: ' + cam1FileName + ' / ' + cam2FileName);
           console.log('  - 진행률: ' + updateCount + '/' + emptyRowCount);
           
           // 진행상황 로그 (5개마다)
