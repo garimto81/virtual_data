@@ -119,6 +119,7 @@
             <span id="data-stamp"></span>
           </div>
         </div>
+        <div id="camera-display" class="text-xs text-amber-400 text-center mt-1"></div>
         <div id="player-selection-buttons" class="flex flex-wrap gap-1"></div>
       </div>
 
@@ -165,7 +166,6 @@
         <div class="flex flex-wrap gap-1 items-center">
           <span class="text-sm font-bold mr-2">승자:</span>
           <div id="winner-buttons" class="flex flex-wrap gap-1 flex-grow"></div>
-          <button id="distribute-pot-btn" class="btn bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-2 rounded-md text-xs ml-2">팟 분배</button>
         </div>
         <div class="grid grid-cols-2 gap-2">
           <button id="reset-btn" class="w-full btn bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-3 rounded-md text-sm">새 핸드</button>
@@ -267,7 +267,6 @@
       bbAnteCheckbox: document.getElementById('bb-ante-checkbox'),
       streetLogsContainer: document.getElementById('street-logs-container'),
       winnerButtons: document.getElementById('winner-buttons'),
-      distributePotBtn: document.getElementById('distribute-pot-btn'),
       sendToSheetBtn: document.getElementById('send-to-sheet-btn'),
       resetBtn: document.getElementById('reset-btn'),
       feedbackMessage: document.getElementById('feedback-message'),
@@ -286,6 +285,7 @@
       cam1: document.getElementById('cam-btn-1'),
       cam2: document.getElementById('cam-btn-2'),
       dataStamp: document.getElementById('data-stamp'),
+      cameraDisplay: document.getElementById('camera-display'),
     };
 
     // ====== LOG MODAL ======
@@ -374,11 +374,25 @@
     function renderPlayerDetails(){
       el.playerDetailsSection.innerHTML = state.playersInHand.map(p=>{
         const roleClass=(p.role==='winner')?'is-winner':'';
+        const currentChips = parseInt(unformatNumber(p.currentChips || p.chips), 10);
+        const initialChips = parseInt(unformatNumber(p.initialChips || p.chips), 10);
+        const chipDiff = currentChips - initialChips;
+        const chipDiffDisplay = chipDiff !== 0 ? 
+          `<span class="text-xs ${chipDiff > 0 ? 'text-green-400' : 'text-red-400'}"> (${chipDiff > 0 ? '+' : ''}${formatNumber(chipDiff)})</span>` : '';
+        
         return `<div class="player-card flex items-center gap-2 text-sm border-b border-gray-700 pb-1 ${roleClass}" data-player-name="${p.name}">
-          <div class="w-1/4 truncate font-bold">${p.name}</div>
-          <div class="w-1/4"><input type="text" readonly class="number-input player-chip-input w-full bg-gray-700 border border-gray-600 rounded-md p-1 text-xs" placeholder="칩" value="${formatNumber(p.chips)}"></div>
-          <div class="w-1/4"><button class="keypad-icon-btn btn bg-gray-600 p-1 rounded-md text-xs w-full">⌨️</button></div>
-          <div class="w-1/4 card-placeholder h-10 flex justify-center items-center gap-1" data-player-name="${p.name}" data-count="2">
+          <div class="w-1/5 truncate font-bold">${p.name}</div>
+          <div class="w-1/5 flex items-center">
+            <input type="text" class="number-input initial-chip-input w-full bg-gray-700 border border-gray-600 rounded-md p-1 text-xs" 
+                   placeholder="시작칩" value="${formatNumber(p.initialChips)}" data-player="${p.name}">
+          </div>
+          <div class="w-1/5 flex items-center">
+            <input type="text" readonly class="number-input current-chip-input w-full bg-gray-700 border border-gray-600 rounded-md p-1 text-xs" 
+                   placeholder="현재칩" value="${formatNumber(p.currentChips || p.chips)}">
+            ${chipDiffDisplay}
+          </div>
+          <div class="w-1/5"><button class="keypad-icon-btn btn bg-gray-600 p-1 rounded-md text-xs w-full" data-chip-type="current">⌨️</button></div>
+          <div class="w-1/5 card-placeholder h-10 flex justify-center items-center gap-1" data-player-name="${p.name}" data-count="2">
             ${p.hand?.length? p.hand.map(formatCardDisplay).join('') : '<span class="text-gray-400 text-lg">+</span>'}
           </div>
         </div>`;
@@ -590,14 +604,36 @@
         const pool=state.playerDataByTable[state.selectedTable]||[];
         const pd=pool.find(p=>p.name===name);
         const chips=pd?pd.chips:'';
-        state.playersInHand.push({name, hand:[], chips, initialChips:chips, role:null});
+        // 초기 칩과 현재 칩을 분리하여 관리
+        state.playersInHand.push({
+          name, 
+          hand:[], 
+          initialChips: chips,  // 시작 칩 (수동 변경 가능)
+          currentChips: chips,  // 현재 칩 (게임 중 변동)
+          chips: chips,        // 호환성을 위해 유지
+          role:null
+        });
       }
       renderPlayerSelection(); renderPlayerDetails(); renderWinnerSelection();
     }
     function setPlayerRole(name){
-      const p=state.playersInHand.find(pp=>pp.name===name); if(!p) return;
+      const p=state.playersInHand.find(pp=>pp.name===name); 
+      if(!p) return;
+      
+      // 기존 승자 역할 토글
       p.role = (p.role==='winner')? null : 'winner';
-      renderPlayerDetails(); renderWinnerSelection();
+      
+      // 승자가 선택되면 자동으로 팟 분배 실행 (조용히)
+      const winners = state.playersInHand.filter(pp => pp.role === 'winner');
+      if(winners.length > 0) {
+        // 짧은 딜레이 후 팟 분배 (UI 업데이트를 위해)
+        setTimeout(() => {
+          distributePotsToWinners(true); // silent 모드로 실행
+        }, 100);
+      }
+      
+      renderPlayerDetails(); 
+      renderWinnerSelection();
     }
     function assignCard(cards){
       const {target,player,index} = state.modalState.cardTarget;
@@ -621,12 +657,14 @@
       if (amount){
         const p = state.playersInHand.find(pp => pp.name === actionPadPlayer);
         if (p){
-          const cur = parseInt(unformatNumber(p.chips) || 0, 10);
+          // currentChips에서만 차감 (initialChips는 변경하지 않음)
+          const cur = parseInt(unformatNumber(p.currentChips || p.chips) || 0, 10);
           const amountToDeduct = parseInt(unformatNumber(amount), 10);
           // 음수 방지: 칩이 0 이하로 떨어지지 않도록
           const newChips = Math.max(0, cur - amountToDeduct);
-          p.chips = newChips.toString();
-          p.chipsUpdatedAt = new Date().toISOString(); // ★ 프로그램적 변경도 타임스탬프 기록
+          p.currentChips = newChips.toString();
+          p.chips = newChips.toString(); // 호환성 유지
+          p.chipsUpdatedAt = new Date().toISOString();
         }
       }
       state.actionState[actionPadStreet].push({
@@ -647,7 +685,12 @@
       const last=state.actionState[street].pop();
       if(last&&last.amount){
         const p=state.playersInHand.find(pp=>pp.name===last.player);
-        if(p){ const cur=parseInt(unformatNumber(p.chips)||0,10); p.chips=(cur+parseInt(unformatNumber(last.amount),10)).toString(); }
+        if(p){ 
+          const cur=parseInt(unformatNumber(p.currentChips || p.chips)||0,10); 
+          const refundAmount = parseInt(unformatNumber(last.amount),10);
+          p.currentChips=(cur+refundAmount).toString();
+          p.chips=(cur+refundAmount).toString(); // 호환성 유지
+        }
       }
       saveActionState(); renderAll();
     }
@@ -778,26 +821,42 @@
     
     // ====== POT ======
     function calculatePotSize(){
-      let pot=0;
-      pot+=parseInt(unformatNumber(state.actionState.smallBlind)||0,10);
-      pot+=parseInt(unformatNumber(state.actionState.bigBlind)||0,10);
-      if(state.actionState.hasBBAnte) pot+=parseInt(unformatNumber(state.actionState.bigBlind)||0,10);
+      // 방법 1: 초기 칩 총합 - 현재 칩 총합 = 팟
+      const initialTotal = state.playersInHand.reduce((sum, p) => {
+        return sum + parseInt(unformatNumber(p.initialChips) || 0, 10);
+      }, 0);
+      
+      const currentTotal = state.playersInHand.reduce((sum, p) => {
+        return sum + parseInt(unformatNumber(p.currentChips || p.chips) || 0, 10);
+      }, 0);
+      
+      const calculatedPot = initialTotal - currentTotal;
+      
+      // 방법 2: 액션 로그 기반 계산 (검증용)
+      let logBasedPot=0;
+      logBasedPot+=parseInt(unformatNumber(state.actionState.smallBlind)||0,10);
+      logBasedPot+=parseInt(unformatNumber(state.actionState.bigBlind)||0,10);
+      if(state.actionState.hasBBAnte) logBasedPot+=parseInt(unformatNumber(state.actionState.bigBlind)||0,10);
       
       ['preflop','flop','turn','river'].forEach(st=> {
         state.actionState[st].forEach(a=>{ 
           if(a.amount) {
-            // Pot Correction은 팟을 직접 설정하는 값이므로 다르게 처리
             if(a.action === 'Pot Correction') {
-              // Pot Correction: 입력한 값이 새로운 팟 크기가 됨
-              pot = parseInt(unformatNumber(a.amount),10);
+              logBasedPot = parseInt(unformatNumber(a.amount),10);
             } else {
-              // 일반 액션: 팟에 추가
-              pot+=parseInt(unformatNumber(a.amount),10); 
+              logBasedPot+=parseInt(unformatNumber(a.amount),10); 
             }
           }
         });
       });
-      return pot;
+      
+      // 두 방법 중 더 정확한 값 사용 (칩 기반 계산 우선)
+      // Pot Correction이 있으면 로그 기반 사용
+      const hasPotCorrection = ['preflop','flop','turn','river'].some(st => 
+        state.actionState[st].some(a => a.action === 'Pot Correction')
+      );
+      
+      return hasPotCorrection ? logBasedPot : (calculatedPot > 0 ? calculatedPot : logBasedPot);
     }
 
     // ====== CSV LOADERS ======
@@ -816,8 +875,8 @@
       const A3=(rows[2]&&rows[2][0])?String(rows[2][0]).trim():'';
       state.camPreset.cam1=A2||'Cam1';
       state.camPreset.cam2=A3||'Cam2';
-      el.cam1.textContent = state.camPreset.cam1 || 'Cam1';
-      el.cam2.textContent = state.camPreset.cam2 || 'Cam2';
+      el.cam1.innerHTML = `<span class="text-xs">📹 ${state.camPreset.cam1 || 'Cam1'}</span>`;
+      el.cam2.innerHTML = `<span class="text-xs">📹 ${state.camPreset.cam2 || 'Cam2'}</span>`;
 
       const byTable={};
       for(let i=1;i<rows.length;i++){
@@ -1169,7 +1228,7 @@
       const players = state.playersInHand.map((p,i)=>({...p, seat:i+1}));
       players.forEach(p=>{
         let initialChips = parseInt(unformatNumber(p.initialChips)||0,10);
-        let finalChips = parseInt(unformatNumber(p.chips)||0,10);
+        let finalChips = parseInt(unformatNumber(p.currentChips || p.chips)||0,10);
         // PLAYER: B name, C seat, D 0, E 0, F 시작칩, G 종료칩, H 핸드
         push(['PLAYER', p.name, p.seat, 0, 0, initialChips, finalChips, p.hand?.length? p.hand.join(' ') : '']);
       });
@@ -1339,7 +1398,7 @@ async function sendDataToGoogleSheet(){
         .map(p => ({
           player: p.name,
           table,
-          chips: String(p.chips || ''), // 승자 보상 포함된 최종 칩
+          chips: String(p.currentChips || p.chips || ''), // 승자 보상 포함된 최종 칩
           updatedAt: p.chipsUpdatedAt, // ISO. 앱 스크립트에서 Date로 set
           lastResult: p.role === 'winner' ? 'W' : 'L' // 승패 기록
         }));
@@ -1347,6 +1406,23 @@ async function sendDataToGoogleSheet(){
 
 
 
+    // ====== CAMERA DISPLAY ======
+    function updateCameraDisplay(){
+      const cam1Text = state.camNumbers.cam1no ? 
+        `${state.camPreset.cam1 || 'Cam1'}_${state.camNumbers.cam1no}.mp4` : '';
+      const cam2Text = state.camNumbers.cam2no ? 
+        `${state.camPreset.cam2 || 'Cam2'}_${state.camNumbers.cam2no}.mp4` : '';
+      
+      if(cam1Text || cam2Text) {
+        const displayText = [cam1Text, cam2Text].filter(t => t).join(' | ');
+        el.cameraDisplay.innerHTML = `<span class="font-bold">📹 파일:</span> ${displayText}`;
+        el.cameraDisplay.style.display = 'block';
+      } else {
+        el.cameraDisplay.textContent = '';
+        el.cameraDisplay.style.display = 'none';
+      }
+    }
+    
     // ====== CAM PREFILL ======
     function computeCamPrefill(which){
       // 1) 자신의 값 있으면 그걸 표시
@@ -1373,13 +1449,27 @@ async function sendDataToGoogleSheet(){
 
 
     // ====== POT DISTRIBUTION ======
-    function distributePotsToWinners() {
+    function distributePotsToWinners(silent = false) {
       const winners = state.playersInHand.filter(p => p.role === 'winner');
       
       if(winners.length === 0) {
-        showFeedback('승자를 선택해주세요', true);
+        if (!silent) showFeedback('승자를 선택해주세요', true);
         return false;
       }
+      
+      // 칩 총량 검증
+      const initialTotal = state.playersInHand.reduce((sum, p) => {
+        return sum + parseInt(unformatNumber(p.initialChips) || 0, 10);
+      }, 0);
+      
+      const currentTotal = state.playersInHand.reduce((sum, p) => {
+        return sum + parseInt(unformatNumber(p.currentChips || p.chips) || 0, 10);
+      }, 0);
+      
+      const potSize = calculatePotSize();
+      
+      console.log(`칩 검증 - 초기 총합: ${initialTotal}, 현재 총합: ${currentTotal}, 팟: ${potSize}`);
+      console.log(`예상 총합: ${currentTotal + potSize}, 차이: ${initialTotal - (currentTotal + potSize)}`);
       
       // 사이드팟이 있는지 확인
       const hasAllIn = state.playersInHand.some(p => state.playerStatus[p.name] === 'allin');
@@ -1397,20 +1487,23 @@ async function sendDataToGoogleSheet(){
             const remainder = pot.amount % potWinners.length;
             
             potWinners.forEach((winner, idx) => {
-              const currentChips = parseInt(unformatNumber(winner.chips) || 0, 10);
+              const currentChips = parseInt(unformatNumber(winner.currentChips || winner.chips) || 0, 10);
               const winAmount = share + (idx === 0 ? remainder : 0);
-              winner.chips = formatNumber(currentChips + winAmount);
+              winner.currentChips = formatNumber(currentChips + winAmount);
+              winner.chips = formatNumber(currentChips + winAmount); // 호환성
               winner.chipsUpdatedAt = new Date().toISOString();
               winner.winAmount = (winner.winAmount || 0) + winAmount;
             });
           }
         });
         
-        // 결과 표시
-        const winnerInfo = winners.map(w => 
-          `${w.name} (+${formatNumber(w.winAmount || 0)})`
-        ).join(', ');
-        showFeedback(`팟 분배 완료: ${winnerInfo}`);
+        // 결과 표시 (silent 모드가 아닐 때만)
+        if (!silent) {
+          const winnerInfo = winners.map(w => 
+            `${w.name} (+${formatNumber(w.winAmount || 0)})`
+          ).join(', ');
+          showFeedback(`팟 분배 완료: ${winnerInfo}`);
+        }
         
       } else {
         // 단순 팟 분배
@@ -1419,18 +1512,21 @@ async function sendDataToGoogleSheet(){
         const remainder = totalPot % winners.length;
         
         winners.forEach((winner, idx) => {
-          const currentChips = parseInt(unformatNumber(winner.chips) || 0, 10);
+          const currentChips = parseInt(unformatNumber(winner.currentChips || winner.chips) || 0, 10);
           const winAmount = share + (idx === 0 ? remainder : 0);
-          winner.chips = formatNumber(currentChips + winAmount);
+          winner.currentChips = formatNumber(currentChips + winAmount);
+          winner.chips = formatNumber(currentChips + winAmount); // 호환성
           winner.chipsUpdatedAt = new Date().toISOString();
           winner.winAmount = winAmount;
         });
         
-        // 결과 표시
-        const winnerInfo = winners.map(w => 
-          `${w.name} (+${formatNumber(w.winAmount)})`
-        ).join(', ');
-        showFeedback(`승자: ${winnerInfo}`);
+        // 결과 표시 (silent 모드가 아닐 때만)
+        if (!silent) {
+          const winnerInfo = winners.map(w => 
+            `${w.name} (+${formatNumber(w.winAmount)})`
+          ).join(', ');
+          showFeedback(`승자: ${winnerInfo}`);
+        }
       }
       
       // UI 업데이트
@@ -1522,6 +1618,15 @@ async function sendDataToGoogleSheet(){
       state.board = [];
       state.playerStatus = {}; // 플레이어 상태 초기화
       state.currentStreet = 'river'; // 스트리트 초기화 (기본값: river)
+      
+      // 카메라 번호 초기화
+      state.camNumbers = { cam1no:'', cam2no:'' };
+      el.cam1.innerHTML = `<span class="text-xs">📹 ${state.camPreset.cam1 || 'Cam1'}</span>`;
+      el.cam2.innerHTML = `<span class="text-xs">📹 ${state.camPreset.cam2 || 'Cam2'}</span>`;
+      el.cam1.classList.remove('bg-amber-700');
+      el.cam2.classList.remove('bg-amber-700');
+      updateCameraDisplay(); // 카메라 표시 초기화
+      
       state.actionState = {
         handNumber: String(lastNo + 1),
         smallBlind: state.actionState.smallBlind,
@@ -1542,7 +1647,6 @@ async function sendDataToGoogleSheet(){
       el.loadHandBtn.onclick = openLoadHandModal;
       el.refreshDataBtn.onclick = loadInitial;
       el.resetBtn.onclick = resetApp;
-      el.distributePotBtn.onclick = distributePotsToWinners;
       
       // Cam 버튼 클릭
       el.cam1.addEventListener('click', ()=>{
@@ -1595,8 +1699,13 @@ async function sendDataToGoogleSheet(){
           state.modalState.cardTarget = { target:'playerHand', player:cardPlaceholder.dataset.playerName, count:parseInt(cardPlaceholder.dataset.count) };
           openCardSelector();
         }else if(keypadBtn){
-          const input = playerCard.querySelector('.player-chip-input');
-          openKeypad(input, { purpose:'input' });
+          const chipType = keypadBtn.dataset.chipType || 'current';
+          const input = playerCard.querySelector('.current-chip-input');
+          openKeypad(input, { 
+            purpose:'input', 
+            chipType: chipType,
+            playerName: playerCard.dataset.playerName
+          });
         }
       });
 
@@ -1608,16 +1717,24 @@ async function sendDataToGoogleSheet(){
 
       // 칩 입력 포맷팅
       el.playerDetailsSection.addEventListener('input', (e)=>{
-        if(!e.target.classList.contains('player-chip-input')) return;
         const parent = e.target.closest('.player-card');
+        if(!parent) return;
+        
         const player = state.playersInHand.find(p=>p.name===parent.dataset.playerName);
+        if(!player) return;
+        
         const raw = unformatNumber(e.target.value);
-        if(player) player.chips = raw;
         e.target.value = formatNumber(raw);
-        const nowIso = new Date().toISOString();
-        if (player){
-          player.chips = raw;
-          player.chipsUpdatedAt = nowIso;     // ★ 마지막 수정 시각 기록
+        
+        if(e.target.classList.contains('initial-chip-input')) {
+          // 초기 칩 수동 입력
+          player.initialChips = raw;
+          renderPlayerDetails(); // 차이 표시 업데이트
+        } else if(e.target.classList.contains('current-chip-input')) {
+          // 현재 칩 입력 (readonly이지만 keypad 사용 시)
+          player.currentChips = raw;
+          player.chips = raw; // 호환성
+          player.chipsUpdatedAt = new Date().toISOString();
         }
       });
 
@@ -1791,10 +1908,18 @@ async function sendDataToGoogleSheet(){
             if (which==='cam1'){
               state.camNumbers.cam1no = padded;
               state.lastCamNo = padded;
+              // 버튼 텍스트 업데이트: 파일명처럼 표시
+              el.cam1.innerHTML = `<span class="text-xs">📹 ${state.camPreset.cam1 || 'Cam1'}_${padded}</span>`;
+              el.cam1.classList.add('bg-amber-700');
+              updateCameraDisplay(); // 카메라 표시 업데이트
               showFeedback(`${state.camPreset.cam1 || 'Cam1'}: ${padded} 입력됨`);
             }else if (which==='cam2'){
               state.camNumbers.cam2no = padded;
               state.lastCamNo = padded;
+              // 버튼 텍스트 업데이트: 파일명처럼 표시
+              el.cam2.innerHTML = `<span class="text-xs">📹 ${state.camPreset.cam2 || 'Cam2'}_${padded}</span>`;
+              el.cam2.classList.add('bg-amber-700');
+              updateCameraDisplay(); // 카메라 표시 업데이트
               showFeedback(`${state.camPreset.cam2 || 'Cam2'}: ${padded} 입력됨`);
             }
           }else if(purpose==='bet'){
@@ -1813,9 +1938,14 @@ async function sendDataToGoogleSheet(){
               saveActionState(); renderAll();
             }
           }else if(purpose==='input'){
-            if(state.modalState.keypadTarget){
-              state.modalState.keypadTarget.value = display.textContent;
-              state.modalState.keypadTarget.dispatchEvent(new Event('input',{bubbles:true}));
+            // 현재 칩 입력 처리
+            const playerName = state.modalState.keypadOptions.playerName;
+            const player = state.playersInHand.find(p => p.name === playerName);
+            if(player) {
+              player.currentChips = finalAmt;
+              player.chips = finalAmt; // 호환성
+              player.chipsUpdatedAt = new Date().toISOString();
+              renderPlayerDetails();
             }
           }
           closeModal(el.keypadModal);
@@ -1876,6 +2006,7 @@ async function sendDataToGoogleSheet(){
       try{
         await loadInitial();
         renderTableSelection();
+        updateCameraDisplay(); // 초기 로드 시 카메라 표시 초기화
         if(timeUpdater) clearInterval(timeUpdater);
         timeUpdater = setInterval(updateTimeDisplay, 1000);
         updateTimeDisplay();
