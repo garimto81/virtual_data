@@ -1153,8 +1153,33 @@
 
         // currentStreet 결정: Index에서 저장된 값 우선, 없으면 액션으로 판단
         const indexRow = state.indexRows.find(r => r.handNumber === String(handNumber));
-        if(indexRow && indexRow.lastStreet) {
-          state.currentStreet = indexRow.lastStreet;
+        if(indexRow) {
+          // 카메라 번호 복원 또는 초기화
+          if(indexRow.cam1no) {
+            state.camNumbers.cam1no = indexRow.cam1no;
+            el.cam1.innerHTML = `<span class="text-xs">📹 ${state.camPreset.cam1 || 'Cam1'}_${indexRow.cam1no}</span>`;
+            el.cam1.classList.add('bg-amber-700');
+          } else {
+            state.camNumbers.cam1no = '';
+            el.cam1.innerHTML = `<span class="text-xs">📹 ${state.camPreset.cam1 || 'Cam1'}</span>`;
+            el.cam1.classList.remove('bg-amber-700');
+          }
+          
+          if(indexRow.cam2no) {
+            state.camNumbers.cam2no = indexRow.cam2no;
+            el.cam2.innerHTML = `<span class="text-xs">📹 ${state.camPreset.cam2 || 'Cam2'}_${indexRow.cam2no}</span>`;
+            el.cam2.classList.add('bg-amber-700');
+          } else {
+            state.camNumbers.cam2no = '';
+            el.cam2.innerHTML = `<span class="text-xs">📹 ${state.camPreset.cam2 || 'Cam2'}</span>`;
+            el.cam2.classList.remove('bg-amber-700');
+          }
+          
+          updateCameraDisplay(); // 카메라 표시 업데이트
+          
+          if(indexRow.lastStreet) {
+            state.currentStreet = indexRow.lastStreet;
+          }
           // 작업 상태 표시
           if(indexRow.workStatus) {
             const statusText = {
