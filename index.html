@@ -1439,9 +1439,9 @@ async function sendDataToGoogleSheet(){
     // ====== CAMERA DISPLAY ======
     function updateCameraDisplay(){
       const cam1Text = state.camNumbers.cam1no ? 
-        `${state.camPreset.cam1 || 'Cam1'}_${state.camNumbers.cam1no}.mp4` : '';
+        `${state.camPreset.cam1 || 'Cam1'}${pad4(state.camNumbers.cam1no)}.mp4` : '';
       const cam2Text = state.camNumbers.cam2no ? 
-        `${state.camPreset.cam2 || 'Cam2'}_${state.camNumbers.cam2no}.mp4` : '';
+        `${state.camPreset.cam2 || 'Cam2'}${pad4(state.camNumbers.cam2no)}.mp4` : '';
       
       if(cam1Text || cam2Text) {
         const displayText = [cam1Text, cam2Text].filter(t => t).join(' | ');
@@ -1969,7 +1969,7 @@ async function sendDataToGoogleSheet(){
               state.camNumbers.cam1no = padded;
               state.lastCamNo = padded;
               // 버튼 텍스트 업데이트: 파일명처럼 표시
-              el.cam1.innerHTML = `<span class="text-xs">📹 ${state.camPreset.cam1 || 'Cam1'}_${padded}</span>`;
+              el.cam1.innerHTML = `<span class="text-xs">📹 ${state.camPreset.cam1 || 'Cam1'}${padded}</span>`;
               el.cam1.classList.add('bg-amber-700');
               updateCameraDisplay(); // 카메라 표시 업데이트
               showFeedback(`${state.camPreset.cam1 || 'Cam1'}: ${padded} 입력됨`);
@@ -1977,7 +1977,7 @@ async function sendDataToGoogleSheet(){
               state.camNumbers.cam2no = padded;
               state.lastCamNo = padded;
               // 버튼 텍스트 업데이트: 파일명처럼 표시
-              el.cam2.innerHTML = `<span class="text-xs">📹 ${state.camPreset.cam2 || 'Cam2'}_${padded}</span>`;
+              el.cam2.innerHTML = `<span class="text-xs">📹 ${state.camPreset.cam2 || 'Cam2'}${padded}</span>`;
               el.cam2.classList.add('bg-amber-700');
               updateCameraDisplay(); // 카메라 표시 업데이트
               showFeedback(`${state.camPreset.cam2 || 'Cam2'}: ${padded} 입력됨`);
