@@ -132,14 +132,20 @@
           <div class="flex items-center gap-1.5">
             <div class="flex items-center gap-1">
               <span class="text-xs text-gray-400">SB</span>
-              <button id="small-blind-btn" class="keypad-icon-btn btn bg-gray-600 hover:bg-gray-500 w-12 sm:w-14 h-8 rounded text-center text-xs sm:text-sm" 
+              <input type="text" id="small-blind-input" 
+                     class="number-input w-10 sm:w-12 h-8 bg-gray-700 p-1 rounded text-center text-xs sm:text-sm" 
+                     placeholder="SB">
+              <button id="small-blind-btn" class="keypad-icon-btn btn bg-gray-600 hover:bg-gray-500 w-6 h-8 rounded text-center" 
                       data-blind-type="smallBlind">
                 <span class="text-xs">⌨️</span>
               </button>
             </div>
             <div class="flex items-center gap-1">
               <span class="text-xs text-gray-400">BB</span>
-              <button id="big-blind-btn" class="keypad-icon-btn btn bg-gray-600 hover:bg-gray-500 w-12 sm:w-14 h-8 rounded text-center text-xs sm:text-sm" 
+              <input type="text" id="big-blind-input" 
+                     class="number-input w-10 sm:w-12 h-8 bg-gray-700 p-1 rounded text-center text-xs sm:text-sm" 
+                     placeholder="BB">
+              <button id="big-blind-btn" class="keypad-icon-btn btn bg-gray-600 hover:bg-gray-500 w-6 h-8 rounded text-center" 
                       data-blind-type="bigBlind">
                 <span class="text-xs">⌨️</span>
               </button>
@@ -264,6 +270,8 @@
       playerDetailsSection: document.getElementById('player-details-section'),
       handNumberDisplay: document.getElementById('hand-number-display'),
       loadHandBtn: document.getElementById('load-hand-btn'),
+      smallBlindInput: document.getElementById('small-blind-input'),
+      bigBlindInput: document.getElementById('big-blind-input'),
       smallBlindBtn: document.getElementById('small-blind-btn'),
       bigBlindBtn: document.getElementById('big-blind-btn'),
       bbAnteCheckbox: document.getElementById('bb-ante-checkbox'),
@@ -1437,15 +1445,17 @@ async function sendDataToGoogleSheet(){
 
 
 
-    // ====== BLIND BUTTONS UPDATE ======
+    // ====== BLIND INPUTS & BUTTONS UPDATE ======
     function updateBlindButtons(){
-      const sbText = state.actionState.smallBlind ? formatNumber(state.actionState.smallBlind) : 'SB';
-      const bbText = state.actionState.bigBlind ? formatNumber(state.actionState.bigBlind) : 'BB';
+      // Input 필드 업데이트
+      el.smallBlindInput.value = state.actionState.smallBlind ? formatNumber(state.actionState.smallBlind) : '';
+      el.bigBlindInput.value = state.actionState.bigBlind ? formatNumber(state.actionState.bigBlind) : '';
       
-      el.smallBlindBtn.innerHTML = `<span class="text-xs">${sbText}</span>`;
-      el.bigBlindBtn.innerHTML = `<span class="text-xs">${bbText}</span>`;
+      // 키패드 버튼은 항상 ⌨️ 아이콘 유지
+      el.smallBlindBtn.innerHTML = `<span class="text-xs">⌨️</span>`;
+      el.bigBlindBtn.innerHTML = `<span class="text-xs">⌨️</span>`;
       
-      // 값이 있으면 하이라이트
+      // 값이 있으면 버튼 하이라이트
       if(state.actionState.smallBlind) {
         el.smallBlindBtn.classList.add('bg-amber-700');
         el.smallBlindBtn.classList.remove('bg-gray-600');
@@ -2027,7 +2037,7 @@ async function sendDataToGoogleSheet(){
             const value = display.textContent;
             if(blindType && value) {
               state.actionState[blindType] = value;
-              updateBlindButtons();
+              updateBlindButtons(); // input 필드와 버튼 모두 업데이트
               saveActionState();
               showFeedback(`${blindType === 'smallBlind' ? 'SB' : 'BB'}: ${formatNumber(value)} 설정됨`);
             }
@@ -2081,6 +2091,25 @@ async function sendDataToGoogleSheet(){
         }
       });
 
+      // SB/BB input 필드 처리
+      el.smallBlindInput.addEventListener('input', (e)=>{
+        const raw = unformatNumber(e.target.value);
+        const fmt = formatNumber(raw);
+        if(e.target.value!==fmt) e.target.value=fmt;
+        state.actionState.smallBlind = raw;
+        updateBlindButtons();
+        saveActionState();
+      });
+      
+      el.bigBlindInput.addEventListener('input', (e)=>{
+        const raw = unformatNumber(e.target.value);
+        const fmt = formatNumber(raw);
+        if(e.target.value!==fmt) e.target.value=fmt;
+        state.actionState.bigBlind = raw;
+        updateBlindButtons();
+        saveActionState();
+      });
+      
       // 기타 number-input 처리 (칩 입력 등)
       document.querySelectorAll('.number-input:not(#small-blind-input):not(#big-blind-input)').forEach(inp=>{
         inp.addEventListener('input', (e)=>{
