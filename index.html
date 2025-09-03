@@ -132,15 +132,17 @@
           <div class="flex items-center gap-1.5">
             <div class="flex items-center gap-1">
               <span class="text-xs text-gray-400">SB</span>
-              <input type="text" id="small-blind-input" 
-                     class="number-input w-12 sm:w-14 h-8 bg-gray-700 p-1 rounded text-center text-xs sm:text-sm" 
-                     placeholder="SB">
+              <button id="small-blind-btn" class="keypad-icon-btn btn bg-gray-600 hover:bg-gray-500 w-12 sm:w-14 h-8 rounded text-center text-xs sm:text-sm" 
+                      data-blind-type="smallBlind">
+                <span class="text-xs">⌨️</span>
+              </button>
             </div>
             <div class="flex items-center gap-1">
               <span class="text-xs text-gray-400">BB</span>
-              <input type="text" id="big-blind-input" 
-                     class="number-input w-12 sm:w-14 h-8 bg-gray-700 p-1 rounded text-center text-xs sm:text-sm" 
-                     placeholder="BB">
+              <button id="big-blind-btn" class="keypad-icon-btn btn bg-gray-600 hover:bg-gray-500 w-12 sm:w-14 h-8 rounded text-center text-xs sm:text-sm" 
+                      data-blind-type="bigBlind">
+                <span class="text-xs">⌨️</span>
+              </button>
             </div>
             <label class="flex items-center">
               <input id="bb-ante-checkbox" type="checkbox" class="h-4 w-4">
@@ -262,8 +264,8 @@
       playerDetailsSection: document.getElementById('player-details-section'),
       handNumberDisplay: document.getElementById('hand-number-display'),
       loadHandBtn: document.getElementById('load-hand-btn'),
-      smallBlindInput: document.getElementById('small-blind-input'),
-      bigBlindInput: document.getElementById('big-blind-input'),
+      smallBlindBtn: document.getElementById('small-blind-btn'),
+      bigBlindBtn: document.getElementById('big-blind-btn'),
       bbAnteCheckbox: document.getElementById('bb-ante-checkbox'),
       streetLogsContainer: document.getElementById('street-logs-container'),
       winnerButtons: document.getElementById('winner-buttons'),
@@ -1147,8 +1149,7 @@
         }));
 
         el.handNumberDisplay.textContent = `#${handNumber}`;
-        el.smallBlindInput.value = formatNumber(state.actionState.smallBlind);
-        el.bigBlindInput.value = formatNumber(state.actionState.bigBlind);
+        updateBlindButtons();
         el.bbAnteCheckbox.checked = state.actionState.hasBBAnte;
 
         // currentStreet 결정: Index에서 저장된 값 우선, 없으면 액션으로 판단
@@ -1436,6 +1437,32 @@ async function sendDataToGoogleSheet(){
 
 
 
+    // ====== BLIND BUTTONS UPDATE ======
+    function updateBlindButtons(){
+      const sbText = state.actionState.smallBlind ? formatNumber(state.actionState.smallBlind) : 'SB';
+      const bbText = state.actionState.bigBlind ? formatNumber(state.actionState.bigBlind) : 'BB';
+      
+      el.smallBlindBtn.innerHTML = `<span class="text-xs">${sbText}</span>`;
+      el.bigBlindBtn.innerHTML = `<span class="text-xs">${bbText}</span>`;
+      
+      // 값이 있으면 하이라이트
+      if(state.actionState.smallBlind) {
+        el.smallBlindBtn.classList.add('bg-amber-700');
+        el.smallBlindBtn.classList.remove('bg-gray-600');
+      } else {
+        el.smallBlindBtn.classList.remove('bg-amber-700');
+        el.smallBlindBtn.classList.add('bg-gray-600');
+      }
+      
+      if(state.actionState.bigBlind) {
+        el.bigBlindBtn.classList.add('bg-amber-700');
+        el.bigBlindBtn.classList.remove('bg-gray-600');
+      } else {
+        el.bigBlindBtn.classList.remove('bg-amber-700');
+        el.bigBlindBtn.classList.add('bg-gray-600');
+      }
+    }
+
     // ====== CAMERA DISPLAY ======
     function updateCameraDisplay(){
       const cam1Text = state.camNumbers.cam1no ? 
@@ -1690,6 +1717,7 @@ async function sendDataToGoogleSheet(){
       
       renderAll(); 
       saveActionState();
+      updateBlindButtons(); // 블라인드 버튼 업데이트
       el.handNumberDisplay.textContent = `#${state.actionState.handNumber}`;
       
       console.log(`✅ resetApp 완료 - 새 핸드: #${finalHandNo}`);
@@ -1715,6 +1743,17 @@ async function sendDataToGoogleSheet(){
       el.cam2.addEventListener('click', ()=>{
         const prefill = computeCamPrefill('cam2');
         openKeypad(null, { purpose:'cam', cam:'cam2', prefill });
+      });
+      
+      // SB/BB 버튼 클릭
+      el.smallBlindBtn.addEventListener('click', ()=>{
+        const currentValue = state.actionState.smallBlind || '';
+        openKeypad(null, { purpose:'blind', blindType:'smallBlind', prefill: currentValue });
+      });
+      
+      el.bigBlindBtn.addEventListener('click', ()=>{
+        const currentValue = state.actionState.bigBlind || '';
+        openKeypad(null, { purpose:'blind', blindType:'bigBlind', prefill: currentValue });
       });
       // "시트 전송" 버튼을 누르면 → 바로 전송 (노트 기능 제거)
       el.sendToSheetBtn.onclick = () => { sendDataToGoogleSheet(); };
@@ -1982,6 +2021,16 @@ async function sendDataToGoogleSheet(){
               updateCameraDisplay(); // 카메라 표시 업데이트
               showFeedback(`${state.camPreset.cam2 || 'Cam2'}: ${padded} 입력됨`);
             }
+          }else if(purpose==='blind'){
+            // SB/BB 블라인드 값 설정
+            const blindType = state.modalState.keypadOptions.blindType;
+            const value = display.textContent;
+            if(blindType && value) {
+              state.actionState[blindType] = value;
+              updateBlindButtons();
+              saveActionState();
+              showFeedback(`${blindType === 'smallBlind' ? 'SB' : 'BB'}: ${formatNumber(value)} 설정됨`);
+            }
           }else if(purpose==='bet'){
             if(finalAmt) addActionToLog(state.modalState.actionPadCurrentAction, finalAmt);
           }else if(purpose==='pot'){
@@ -2032,15 +2081,12 @@ async function sendDataToGoogleSheet(){
         }
       });
 
-      // SB/BB/Ante 체크
-      document.querySelectorAll('.number-input').forEach(inp=>{
+      // 기타 number-input 처리 (칩 입력 등)
+      document.querySelectorAll('.number-input:not(#small-blind-input):not(#big-blind-input)').forEach(inp=>{
         inp.addEventListener('input', (e)=>{
           const raw = unformatNumber(e.target.value);
           const fmt = formatNumber(raw);
           if(e.target.value!==fmt) e.target.value=fmt;
-          const k = toCamelCase(e.target.id.replace('-input','')); // small-blind-input -> smallBlind
-          if(k in state.actionState) state.actionState[k]=raw;
-          saveActionState();
         });
       });
       el.bbAnteCheckbox.onchange = (e)=>{ state.actionState.hasBBAnte = e.target.checked; saveActionState(); renderAll(); };
@@ -2081,6 +2127,7 @@ async function sendDataToGoogleSheet(){
       try{
         await loadInitial();
         renderTableSelection();
+        updateBlindButtons(); // 초기 로드 시 블라인드 버튼 업데이트
         updateCameraDisplay(); // 초기 로드 시 카메라 표시 초기화
         if(timeUpdater) clearInterval(timeUpdater);
         timeUpdater = setInterval(updateTimeDisplay, 1000);
