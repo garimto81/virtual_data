@@ -1633,19 +1633,39 @@ async function sendDataToGoogleSheet(){
     
     // ====== RESET & FEEDBACK ======
     async function resetApp(){
-      // Index 데이터 다시 로드하여 최신 핸드 번호 가져오기
+      console.log('🔄 resetApp 시작 - 다음 핸드로 갱신 중...');
+      
+      // 현재 핸드 번호를 먼저 증가 (CSV 갱신과 무관하게)
+      const currentHandNo = parseInt(state.actionState.handNumber, 10) || 0;
+      const nextHandNo = currentHandNo + 1;
+      console.log(`📈 핸드 번호 증가: ${currentHandNo} → ${nextHandNo}`);
+      
+      // Index 데이터 다시 로드하여 최신 핸드 번호 확인
       try {
         if(CSV_INDEX_URL.includes('http')){
+          console.log('📋 Index CSV 재로드 중...');
           const idxRows = await fetchCsv(CSV_INDEX_URL + `&cb=${Date.now()}`);
           buildIndexFromCsv(idxRows);
+          console.log(`✅ Index CSV 재로드 완료 (${idxRows.length}행)`);
         }
       } catch(err) {
-        console.error('Index 재로드 실패:', err);
+        console.error('❌ Index 재로드 실패:', err);
       }
       
-      const lastNo = state.indexRows.length
+      // CSV에서 가져온 최신 번호와 비교
+      const lastNoFromCsv = state.indexRows.length
         ? Math.max(...state.indexRows.map(r=>parseInt(r.handNumber,10)||0))
         : 0;
+      
+      // 둘 중 더 큰 번호 + 1 사용 (안전장치)
+      const finalHandNo = Math.max(nextHandNo, lastNoFromCsv + 1);
+      
+      console.log(`🔍 핸드 번호 결정:`)
+      console.log(`  - 현재 + 1: ${nextHandNo}`);
+      console.log(`  - CSV 최신 + 1: ${lastNoFromCsv + 1}`);
+      console.log(`  - 최종 결정: ${finalHandNo}`);
+      
+      // 상태 초기화
       state.playersInHand = [];
       state.board = [];
       state.playerStatus = {}; // 플레이어 상태 초기화
@@ -1659,15 +1679,21 @@ async function sendDataToGoogleSheet(){
       el.cam2.classList.remove('bg-amber-700');
       updateCameraDisplay(); // 카메라 표시 초기화
       
+      // 액션 상태 초기화
       state.actionState = {
-        handNumber: String(lastNo + 1),
+        handNumber: String(finalHandNo),
         smallBlind: state.actionState.smallBlind,
         bigBlind: state.actionState.bigBlind,
         hasBBAnte: state.actionState.hasBBAnte,
         preflop: [], flop: [], turn: [], river: [],
       };
-      renderAll(); saveActionState();
+      
+      renderAll(); 
+      saveActionState();
       el.handNumberDisplay.textContent = `#${state.actionState.handNumber}`;
+      
+      console.log(`✅ resetApp 완료 - 새 핸드: #${finalHandNo}`);
+      logMessage(`🆕 새 핸드 시작: #${finalHandNo}`);
     }
     function showFeedback(msg,isErr=false){
       el.feedbackMessage.textContent = msg;
