@@ -186,45 +186,101 @@ function createErrorResponse(message) {
 // ============ 테스트 함수 ============
 function testConnection() {
   try {
+    console.log('🔍 === 연결 테스트 시작 ===');
+    console.log('🆔 스프레드시트 ID: ' + SPREADSHEET_ID);
+    
     var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
-    console.log('연결 성공! 스프레드시트 이름:', spreadsheet.getName());
+    console.log('✅ 스프레드시트 연결 성공!');
+    console.log('📋 스프레드시트 이름: "' + spreadsheet.getName() + '"');
+    console.log('🔗 스프레드시트 URL: https://docs.google.com/spreadsheets/d/' + SPREADSHEET_ID);
     
     var indexSheet = spreadsheet.getSheetByName('Index');
     var typeSheet = spreadsheet.getSheetByName('Type');
     
-    console.log('Index 시트:', indexSheet ? '찾음' : '없음');
-    console.log('Type 시트:', typeSheet ? '찾음' : '없음');
+    console.log('📄 시트 확인:');
+    console.log('  - Index 시트: ' + (indexSheet ? '✅ 찾음' : '❌ 없음'));
+    console.log('  - Type 시트: ' + (typeSheet ? '✅ 찾음' : '❌ 없음'));
     
     if (indexSheet) {
       var lastRow = indexSheet.getLastRow();
-      console.log('Index 시트 총 행 수:', lastRow);
+      var lastCol = indexSheet.getLastColumn();
+      console.log('📊 Index 시트 정보:');
+      console.log('  - 총 행 수: ' + lastRow);
+      console.log('  - 총 열 수: ' + lastCol);
+      
+      // 헤더 정보 확인
+      if (lastRow > 0) {
+        var headers = indexSheet.getRange(1, 1, 1, Math.min(15, lastCol)).getValues()[0];
+        console.log('📋 헤더 정보 (A~O열):');
+        for (var h = 0; h < headers.length; h++) {
+          var colLetter = String.fromCharCode(65 + h); // A, B, C...
+          console.log('  - ' + colLetter + '열: "' + headers[h] + '"');
+        }
+      }
       
       // 카메라 정보가 없는 행 찾기
       var indexData = indexSheet.getDataRange().getValues();
       var emptyCount = 0;
+      var totalDataRows = indexData.length - 1;
+      
+      console.log('🔍 카메라 정보 분석 중...');
+      console.log('📊 전체 데이터 행 수: ' + totalDataRows);
       
       for (var i = 1; i < indexData.length; i++) {
         var row = indexData[i];
-        if (row[0] && (!row[11] || !row[13])) { // handNumber는 있지만 cam1no/cam2no가 없는 경우
+        var handNumber = row[0];   // A열
+        var cam1no = row[11];      // L열
+        var cam2no = row[13];      // N열
+        
+        if (handNumber && (!cam1no || !cam2no || cam1no === '' || cam2no === '')) {
           emptyCount++;
-          if (emptyCount <= 3) {
-            console.log('빈 행 예시 ' + emptyCount + ': 행 ' + (i + 1) + ', HandNumber: ' + row[0]);
+          if (emptyCount <= 5) {
+            console.log('📝 빈 행 예시 ' + emptyCount + ':');
+            console.log('  - 행 번호: ' + (i + 1));
+            console.log('  - HandNumber (A열): "' + handNumber + '"');
+            console.log('  - Cam1no (L열): "' + cam1no + '"');
+            console.log('  - Cam2no (N열): "' + cam2no + '"');
+            console.log('  - J열 (cam): "' + row[9] + '"');
+            console.log('  - K열 (camFile01name): "' + row[10] + '"');
+            console.log('  - M열 (camFile02name): "' + row[12] + '"');
           }
         }
       }
-      console.log('카메라 정보가 없는 행 수:', emptyCount);
+      
+      console.log('📈 분석 결과:');
+      console.log('  - 전체 데이터 행: ' + totalDataRows + '개');
+      console.log('  - 카메라 정보 없는 행: ' + emptyCount + '개');
+      console.log('  - 카메라 정보 있는 행: ' + (totalDataRows - emptyCount) + '개');
+      console.log('  - 완료 비율: ' + Math.round((totalDataRows - emptyCount) / totalDataRows * 100) + '%');
     }
     
     if (typeSheet) {
-      var typeData = typeSheet.getRange('A2:A3').getValues();
-      var cam1 = typeData[0] && typeData[0][0] ? typeData[0][0] : 'empty';
-      var cam2 = typeData[1] && typeData[1][0] ? typeData[1][0] : 'empty';
-      console.log('Type 시트 카메라 이름: ' + cam1 + ', ' + cam2);
+      console.log('📷 Type 시트 카메라 이름 확인:');
+      var typeData = typeSheet.getRange('A1:A10').getValues(); // A1~A10까지 확인
+      
+      console.log('📋 Type 시트 A1~A10 전체 내용:');
+      for (var t = 0; t < typeData.length; t++) {
+        if (typeData[t][0]) {
+          console.log('  - A' + (t + 1) + ': "' + typeData[t][0] + '"');
+        }
+      }
+      
+      var cam1 = (typeData[1] && typeData[1][0]) ? String(typeData[1][0]).trim() : 'empty';
+      var cam2 = (typeData[2] && typeData[2][0]) ? String(typeData[2][0]).trim() : 'empty';
+      
+      console.log('🎥 추출된 카메라 이름:');
+      console.log('  - 카메라1 (A2): "' + cam1 + '"');
+      console.log('  - 카메라2 (A3): "' + cam2 + '"');
     }
     
+    console.log('✅ === 연결 테스트 완료 ===');
     return '테스트 성공';
+    
   } catch(error) {
-    console.error('테스트 실패:', error);
+    console.error('💥 === 연결 테스트 실패 ===');
+    console.error('오류 메시지: ' + error.message);
+    console.error('오류 전체: ' + error.toString());
+    console.error('오류 스택: ' + error.stack);
     return '테스트 실패: ' + error.toString();
   }
 }
@@ -279,80 +335,157 @@ function manualUpdate() {
   var increment = 1;
   
   try {
-    console.log('수동 업데이트 시작...');
+    console.log('🚀 === 카메라 정보 일괄 업데이트 시작 ===');
+    console.log('📊 설정값 - 시작번호: ' + startNumber + ', 증가간격: ' + increment);
     
+    // 1. 스프레드시트 연결
+    console.log('📋 1단계: 스프레드시트 연결 중...');
     var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
-    console.log('스프레드시트 연결 성공: ' + spreadsheet.getName());
+    console.log('✅ 스프레드시트 연결 성공: "' + spreadsheet.getName() + '"');
     
+    // 2. 시트 찾기
+    console.log('📄 2단계: 시트 확인 중...');
     var indexSheet = spreadsheet.getSheetByName('Index');
     var typeSheet = spreadsheet.getSheetByName('Type');
     
     if (!indexSheet) {
-      throw new Error('Index 시트를 찾을 수 없습니다');
+      throw new Error('❌ Index 시트를 찾을 수 없습니다');
     }
     if (!typeSheet) {
-      throw new Error('Type 시트를 찾을 수 없습니다');
+      throw new Error('❌ Type 시트를 찾을 수 없습니다');
     }
     
-    console.log('Index 시트 찾음, 총 행 수: ' + indexSheet.getLastRow());
+    var indexLastRow = indexSheet.getLastRow();
+    console.log('✅ Index 시트 찾음 - 총 행 수: ' + indexLastRow);
+    console.log('✅ Type 시트 찾음');
     
-    // 카메라 이름 가져오기
+    // 3. 카메라 이름 가져오기
+    console.log('📷 3단계: 카메라 이름 가져오기...');
     var typeData = typeSheet.getRange('A2:A3').getValues();
+    console.log('📖 Type 시트 A2:A3 원본 데이터:', JSON.stringify(typeData));
+    
     var cam1Name = (typeData[0] && typeData[0][0]) ? String(typeData[0][0]).trim() : 'Cam1';
     var cam2Name = (typeData[1] && typeData[1][0]) ? String(typeData[1][0]).trim() : 'Cam2';
     
-    console.log('카메라 이름: ' + cam1Name + ', ' + cam2Name);
+    console.log('🎥 카메라1 이름: "' + cam1Name + '"');
+    console.log('🎥 카메라2 이름: "' + cam2Name + '"');
     
-    // Index 데이터 가져오기
+    // 4. Index 데이터 분석
+    console.log('🔍 4단계: Index 시트 데이터 분석 중...');
     var indexData = indexSheet.getDataRange().getValues();
+    var totalRows = indexData.length;
     var currentNum = startNumber;
     var updateCount = 0;
+    var emptyRowCount = 0;
+    var skippedCount = 0;
     
-    console.log('Index 데이터 행 수: ' + indexData.length);
+    console.log('📊 Index 시트 전체 데이터 행 수: ' + totalRows);
     
-    // 업데이트할 행 찾기 및 처리
-    for (var i = 1; i < indexData.length; i++) {
+    // 먼저 빈 행 개수 파악
+    for (var i = 1; i < totalRows; i++) {
       var row = indexData[i];
       var handNumber = row[0]; // A열
       var cam1no = row[11];    // L열 (cam1no)
       var cam2no = row[13];    // N열 (cam2no)
       
+      if (handNumber && (!cam1no || !cam2no || cam1no === '' || cam2no === '')) {
+        emptyRowCount++;
+      }
+    }
+    
+    console.log('📈 분석 결과:');
+    console.log('  - 전체 데이터 행: ' + (totalRows - 1) + '개');
+    console.log('  - 카메라 정보 없는 행: ' + emptyRowCount + '개');
+    
+    if (emptyRowCount === 0) {
+      console.log('⚠️ 업데이트할 행이 없습니다. 모든 행에 이미 카메라 정보가 있습니다.');
+      return 0;
+    }
+    
+    // 5. 실제 업데이트 실행
+    console.log('💾 5단계: 카메라 정보 업데이트 시작...');
+    console.log('🔄 예상 업데이트 행 수: ' + emptyRowCount + '개');
+    
+    for (var i = 1; i < totalRows; i++) {
+      var row = indexData[i];
+      var handNumber = row[0]; // A열
+      var cam1no = row[11];    // L열 (cam1no)
+      var cam2no = row[13];    // N열 (cam2no)
+      
+      console.log('🔍 행 ' + (i + 1) + ' 검사 중...');
+      console.log('  - HandNumber: "' + handNumber + '"');
+      console.log('  - 기존 Cam1no: "' + cam1no + '"');
+      console.log('  - 기존 Cam2no: "' + cam2no + '"');
+      
       // handNumber는 있지만 cam1no 또는 cam2no가 비어있는 경우
-      if (handNumber && (!cam1no || !cam2no)) {
+      if (handNumber && (!cam1no || !cam2no || cam1no === '' || cam2no === '')) {
         var newCam1no = String(currentNum).padStart(4, '0');
         var newCam2no = String(currentNum + increment).padStart(4, '0');
         
+        console.log('✏️ 행 ' + (i + 1) + ' 업데이트 준비:');
+        console.log('  - 새 Cam1no: "' + newCam1no + '"');
+        console.log('  - 새 Cam2no: "' + newCam2no + '"');
+        
         try {
+          // 업데이트 전 현재 상태 확인
+          var beforeUpdate = indexSheet.getRange(i + 1, 10, 1, 5).getValues()[0];
+          console.log('📋 업데이트 전 J~N열 값:', JSON.stringify(beforeUpdate));
+          
           // J부터 N열까지 업데이트 (열 인덱스: J=10, K=11, L=12, M=13, N=14)
-          indexSheet.getRange(i + 1, 10, 1, 5).setValues([[
+          var updateData = [
             cam1Name + '+' + cam2Name,  // J열
             cam1Name,                    // K열
             newCam1no,                   // L열
             cam2Name,                    // M열
             newCam2no                    // N열
-          ]]);
+          ];
+          
+          console.log('📝 업데이트할 데이터:', JSON.stringify(updateData));
+          
+          indexSheet.getRange(i + 1, 10, 1, 5).setValues([updateData]);
+          
+          // 업데이트 후 확인
+          var afterUpdate = indexSheet.getRange(i + 1, 10, 1, 5).getValues()[0];
+          console.log('📋 업데이트 후 J~N열 값:', JSON.stringify(afterUpdate));
           
           updateCount++;
           currentNum += increment * 2;
           
-          console.log('행 ' + (i + 1) + ' 업데이트 완료: ' + handNumber + ' -> ' + newCam1no + '/' + newCam2no);
+          console.log('✅ 행 ' + (i + 1) + ' 업데이트 성공!');
+          console.log('  - HandNumber: "' + handNumber + '"');
+          console.log('  - 할당된 번호: ' + newCam1no + '/' + newCam2no);
+          console.log('  - 진행률: ' + updateCount + '/' + emptyRowCount);
           
-          // 진행상황 로그
-          if (updateCount % 10 === 0) {
-            console.log('▶ ' + updateCount + '개 행 업데이트 완료...');
+          // 진행상황 로그 (5개마다)
+          if (updateCount % 5 === 0) {
+            console.log('📊 중간 진행상황: ' + updateCount + '/' + emptyRowCount + ' 완료 (' + Math.round(updateCount/emptyRowCount*100) + '%)');
           }
           
         } catch(rowError) {
-          console.error('행 ' + (i + 1) + ' 업데이트 실패: ' + rowError.toString());
+          console.error('❌ 행 ' + (i + 1) + ' 업데이트 실패:');
+          console.error('   오류 내용: ' + rowError.toString());
+          console.error('   오류 스택: ' + rowError.stack);
+          skippedCount++;
         }
+      } else {
+        console.log('⏭️ 행 ' + (i + 1) + ' 건너뛰기 (이미 카메라 정보 있음 또는 HandNumber 없음)');
       }
     }
     
-    console.log('✅ 총 ' + updateCount + '개 행 업데이트 완료!');
+    console.log('🎉 === 업데이트 완료 ===');
+    console.log('📊 최종 결과:');
+    console.log('  - 성공: ' + updateCount + '개');
+    console.log('  - 실패: ' + skippedCount + '개');
+    console.log('  - 전체: ' + emptyRowCount + '개 중 ' + updateCount + '개 처리');
+    console.log('  - 성공률: ' + Math.round(updateCount/(updateCount+skippedCount)*100) + '%');
+    
     return updateCount;
     
   } catch(error) {
-    console.error('❌ 수동 업데이트 실패: ' + error.toString());
+    console.error('💥 === 치명적 오류 발생 ===');
+    console.error('오류 메시지: ' + error.message);
+    console.error('오류 전체: ' + error.toString());
+    console.error('오류 스택: ' + error.stack);
     throw error;
   }
 }
