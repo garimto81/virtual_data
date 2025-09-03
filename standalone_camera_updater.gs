@@ -198,9 +198,74 @@ function testConnection() {
     if (indexSheet) {
       var lastRow = indexSheet.getLastRow();
       console.log('Index 시트 총 행 수:', lastRow);
+      
+      // 카메라 정보가 없는 행 찾기
+      var indexData = indexSheet.getDataRange().getValues();
+      var emptyCount = 0;
+      
+      for (var i = 1; i < indexData.length; i++) {
+        var row = indexData[i];
+        if (row[0] && (!row[11] || !row[13])) { // handNumber는 있지만 cam1no/cam2no가 없는 경우
+          emptyCount++;
+          if (emptyCount <= 3) {
+            console.log('빈 행 예시 ' + emptyCount + ': 행 ' + (i + 1) + ', HandNumber: ' + row[0]);
+          }
+        }
+      }
+      console.log('카메라 정보가 없는 행 수:', emptyCount);
+    }
+    
+    if (typeSheet) {
+      var typeData = typeSheet.getRange('A2:A3').getValues();
+      var cam1 = typeData[0] && typeData[0][0] ? typeData[0][0] : 'empty';
+      var cam2 = typeData[1] && typeData[1][0] ? typeData[1][0] : 'empty';
+      console.log('Type 시트 카메라 이름: ' + cam1 + ', ' + cam2);
     }
     
     return '테스트 성공';
+  } catch(error) {
+    console.error('테스트 실패:', error);
+    return '테스트 실패: ' + error.toString();
+  }
+}
+
+// ============ 간단한 1행 테스트 함수 ============
+function testSingleUpdate() {
+  try {
+    console.log('단일 행 테스트 시작...');
+    
+    var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var indexSheet = spreadsheet.getSheetByName('Index');
+    var typeSheet = spreadsheet.getSheetByName('Type');
+    
+    // 카메라 이름 가져오기
+    var typeData = typeSheet.getRange('A2:A3').getValues();
+    var cam1Name = (typeData[0] && typeData[0][0]) ? String(typeData[0][0]).trim() : 'Cam1';
+    var cam2Name = (typeData[1] && typeData[1][0]) ? String(typeData[1][0]).trim() : 'Cam2';
+    
+    // 빈 행 찾기
+    var indexData = indexSheet.getDataRange().getValues();
+    for (var i = 1; i < indexData.length; i++) {
+      var row = indexData[i];
+      if (row[0] && (!row[11] || !row[13])) { // 첫 번째 빈 행 찾기
+        console.log('테스트 대상 행: ' + (i + 1) + ', HandNumber: ' + row[0]);
+        
+        // 테스트 업데이트
+        indexSheet.getRange(i + 1, 10, 1, 5).setValues([[
+          cam1Name + '+' + cam2Name,  // J열
+          cam1Name,                    // K열
+          '9999',                      // L열 (테스트용)
+          cam2Name,                    // M열
+          '9998'                       // N열 (테스트용)
+        ]]);
+        
+        console.log('테스트 업데이트 완료! 행 ' + (i + 1) + '에 9999/9998 입력');
+        return '테스트 성공: 행 ' + (i + 1);
+      }
+    }
+    
+    return '업데이트할 빈 행이 없습니다';
+    
   } catch(error) {
     console.error('테스트 실패:', error);
     return '테스트 실패: ' + error.toString();
@@ -214,52 +279,80 @@ function manualUpdate() {
   var increment = 1;
   
   try {
+    console.log('수동 업데이트 시작...');
+    
     var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    console.log('스프레드시트 연결 성공: ' + spreadsheet.getName());
+    
     var indexSheet = spreadsheet.getSheetByName('Index');
     var typeSheet = spreadsheet.getSheetByName('Type');
     
+    if (!indexSheet) {
+      throw new Error('Index 시트를 찾을 수 없습니다');
+    }
+    if (!typeSheet) {
+      throw new Error('Type 시트를 찾을 수 없습니다');
+    }
+    
+    console.log('Index 시트 찾음, 총 행 수: ' + indexSheet.getLastRow());
+    
     // 카메라 이름 가져오기
     var typeData = typeSheet.getRange('A2:A3').getValues();
-    var cam1Name = typeData[0][0] || 'Cam1';
-    var cam2Name = typeData[1][0] || 'Cam2';
+    var cam1Name = (typeData[0] && typeData[0][0]) ? String(typeData[0][0]).trim() : 'Cam1';
+    var cam2Name = (typeData[1] && typeData[1][0]) ? String(typeData[1][0]).trim() : 'Cam2';
+    
+    console.log('카메라 이름: ' + cam1Name + ', ' + cam2Name);
     
     // Index 데이터 가져오기
     var indexData = indexSheet.getDataRange().getValues();
     var currentNum = startNumber;
     var updateCount = 0;
     
+    console.log('Index 데이터 행 수: ' + indexData.length);
+    
+    // 업데이트할 행 찾기 및 처리
     for (var i = 1; i < indexData.length; i++) {
       var row = indexData[i];
+      var handNumber = row[0]; // A열
+      var cam1no = row[11];    // L열 (cam1no)
+      var cam2no = row[13];    // N열 (cam2no)
       
-      // handNumber는 있지만 cam1no가 없는 경우
-      if (row[0] && !row[11]) {
-        var cam1no = String(currentNum).padStart(4, '0');
-        var cam2no = String(currentNum + increment).padStart(4, '0');
+      // handNumber는 있지만 cam1no 또는 cam2no가 비어있는 경우
+      if (handNumber && (!cam1no || !cam2no)) {
+        var newCam1no = String(currentNum).padStart(4, '0');
+        var newCam2no = String(currentNum + increment).padStart(4, '0');
         
-        // J부터 N열까지 업데이트
-        indexSheet.getRange(i + 1, 10, 1, 5).setValues([[
-          cam1Name + '+' + cam2Name,  // J열
-          cam1Name,                    // K열
-          cam1no,                      // L열
-          cam2Name,                    // M열
-          cam2no                       // N열
-        ]]);
-        
-        updateCount++;
-        currentNum += increment * 2;
-        
-        // 10개마다 진행상황 로그
-        if (updateCount % 10 === 0) {
-          console.log(updateCount + '개 행 업데이트 완료...');
+        try {
+          // J부터 N열까지 업데이트 (열 인덱스: J=10, K=11, L=12, M=13, N=14)
+          indexSheet.getRange(i + 1, 10, 1, 5).setValues([[
+            cam1Name + '+' + cam2Name,  // J열
+            cam1Name,                    // K열
+            newCam1no,                   // L열
+            cam2Name,                    // M열
+            newCam2no                    // N열
+          ]]);
+          
+          updateCount++;
+          currentNum += increment * 2;
+          
+          console.log('행 ' + (i + 1) + ' 업데이트 완료: ' + handNumber + ' -> ' + newCam1no + '/' + newCam2no);
+          
+          // 진행상황 로그
+          if (updateCount % 10 === 0) {
+            console.log('▶ ' + updateCount + '개 행 업데이트 완료...');
+          }
+          
+        } catch(rowError) {
+          console.error('행 ' + (i + 1) + ' 업데이트 실패: ' + rowError.toString());
         }
       }
     }
     
-    console.log('총 ' + updateCount + '개 행 업데이트 완료!');
+    console.log('✅ 총 ' + updateCount + '개 행 업데이트 완료!');
     return updateCount;
     
   } catch(error) {
-    console.error('수동 업데이트 실패:', error);
+    console.error('❌ 수동 업데이트 실패: ' + error.toString());
     throw error;
   }
 }
