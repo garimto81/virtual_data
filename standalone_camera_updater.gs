@@ -13,6 +13,8 @@
 
 // ============ 설정 영역 시작 ============
 // 포커 핸드 로거 스프레드시트 ID
+// CSV URL에서 추출한 공개 ID는 Apps Script에서 직접 사용할 수 없습니다
+// 실제 Google Sheets 스프레드시트 ID를 입력해야 합니다
 const SPREADSHEET_ID = '1vSDY_i4330JANAjIz4sMncdJdRHsOkfUCjQusHTGQk2tykrhA4d09LeIp3XRbLd8hkN6SgSB47k_nux';
 // ============ 설정 영역 끝 ============
 
@@ -183,9 +185,92 @@ function createErrorResponse(message) {
   })).setMimeType(ContentService.MimeType.JSON);
 }
 
+// ============ 스프레드시트 ID 찾기 함수 ============
+function findSpreadsheetId() {
+  Logger.log('=== 스프레드시트 ID 찾기 시작 ===');
+  
+  // 방법 1: 현재 사용자의 모든 스프레드시트 검색
+  try {
+    Logger.log('DriveApp으로 스프레드시트 검색 중...');
+    var files = DriveApp.getFilesByType(MimeType.GOOGLE_SHEETS);
+    var count = 0;
+    
+    while (files.hasNext() && count < 20) { // 최대 20개만 확인
+      var file = files.next();
+      var fileName = file.getName();
+      var fileId = file.getId();
+      
+      Logger.log('스프레드시트 발견: "' + fileName + '" - ID: ' + fileId);
+      
+      // 포커 관련 키워드가 포함된 시트 찾기
+      if (fileName.toLowerCase().includes('poker') || 
+          fileName.toLowerCase().includes('포커') || 
+          fileName.toLowerCase().includes('hand') || 
+          fileName.toLowerCase().includes('index')) {
+        Logger.log('>>> 포커 관련 시트 가능성: "' + fileName + '" - ID: ' + fileId);
+        
+        // 시트 내용 확인
+        try {
+          var spreadsheet = SpreadsheetApp.openById(fileId);
+          var sheets = spreadsheet.getSheets();
+          var sheetNames = sheets.map(function(sheet) { return sheet.getName(); });
+          Logger.log('    시트 목록: ' + sheetNames.join(', '));
+          
+          // Index와 Type 시트가 모두 있는지 확인
+          if (sheetNames.includes('Index') && sheetNames.includes('Type')) {
+            Logger.log('🎯 올바른 스프레드시트 발견!');
+            Logger.log('    이름: "' + fileName + '"');
+            Logger.log('    ID: ' + fileId);
+            Logger.log('    URL: https://docs.google.com/spreadsheets/d/' + fileId);
+            return fileId;
+          }
+        } catch(sheetError) {
+          Logger.log('    시트 열기 실패: ' + sheetError.toString());
+        }
+      }
+      count++;
+    }
+    
+    Logger.log('포커 핸드 로거 시트를 찾을 수 없습니다.');
+    return null;
+    
+  } catch(error) {
+    Logger.log('검색 실패: ' + error.toString());
+    return null;
+  }
+}
+
+// ============ 간단한 테스트 함수 ============
+function simpleTest() {
+  Logger.log('=== 간단한 테스트 시작 ===');
+  try {
+    Logger.log('현재 설정된 스프레드시트 ID: ' + SPREADSHEET_ID);
+    
+    // 먼저 실제 ID 찾기 시도
+    Logger.log('실제 스프레드시트 ID 검색 중...');
+    var realId = findSpreadsheetId();
+    
+    if (realId) {
+      Logger.log('✅ 실제 스프레드시트 ID 발견: ' + realId);
+      var spreadsheet = SpreadsheetApp.openById(realId);
+      Logger.log('✅ 스프레드시트 이름: ' + spreadsheet.getName());
+      Logger.log('=== 테스트 완료 - 실제 ID 사용 ===');
+      return '성공 - 실제 ID: ' + realId;
+    } else {
+      Logger.log('❌ 실제 스프레드시트를 찾을 수 없습니다');
+      return '실패 - 스프레드시트 없음';
+    }
+    
+  } catch(error) {
+    Logger.log('오류: ' + error.toString());
+    return '실패: ' + error.toString();
+  }
+}
+
 // ============ 테스트 함수 ============
 function testConnection() {
   try {
+    Logger.log('🔍 === 연결 테스트 시작 ===');
     console.log('🔍 === 연결 테스트 시작 ===');
     console.log('🆔 스프레드시트 ID: ' + SPREADSHEET_ID);
     
