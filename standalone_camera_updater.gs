@@ -12,8 +12,8 @@
  */
 
 // ============ 설정 영역 시작 ============
-// 여기에 실제 스프레드시트 ID를 입력하세요
-const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID_HERE';
+// 포커 핸드 로거 스프레드시트 ID
+const SPREADSHEET_ID = '1vSDY_i4330JANAjIz4sMncdJdRHsOkfUCjQusHTGQk2tykrhA4d09LeIp3XRbLd8hkN6SgSB47k_nux';
 // ============ 설정 영역 끝 ============
 
 function doGet() {
@@ -66,9 +66,7 @@ function handleCameraUpdate(requestData) {
     var updatedCount = 0;
     var errors = [];
     
-    // 배치 업데이트를 위한 준비
-    var batchUpdates = [];
-    
+    // 각 업데이트 항목 처리
     updates.forEach(function(update) {
       try {
         var rowIndex = update.rowIndex;
@@ -79,33 +77,20 @@ function handleCameraUpdate(requestData) {
           return;
         }
         
-        // 배치 업데이트 데이터 준비
-        batchUpdates.push({
-          range: 'Index!J' + rowIndex + ':N' + rowIndex,
-          values: [[
-            update.cam,              // J열
-            update.camFile01name,    // K열
-            update.camFile01number,  // L열
-            update.camFile02name,    // M열
-            update.camFile02number   // N열
-          ]]
-        });
+        // J열부터 N열까지 한 번에 업데이트 (열 인덱스: J=10, K=11, L=12, M=13, N=14)
+        indexSheet.getRange(rowIndex, 10, 1, 5).setValues([[
+          update.cam,              // J열
+          update.camFile01name,    // K열
+          update.camFile01number,  // L열
+          update.camFile02name,    // M열
+          update.camFile02number   // N열
+        ]]);
         
         updatedCount++;
       } catch(err) {
         errors.push('행 ' + update.rowIndex + ': ' + err.toString());
       }
     });
-    
-    // 배치 업데이트 실행
-    if (batchUpdates.length > 0) {
-      var batchUpdateRequest = {
-        valueInputOption: 'USER_ENTERED',
-        data: batchUpdates
-      };
-      
-      Sheets.Spreadsheets.Values.batchUpdate(batchUpdateRequest, SPREADSHEET_ID);
-    }
     
     // 업데이트 기록 남기기
     logUpdate(updatedCount, errors);
