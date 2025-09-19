@@ -2,10 +2,15 @@
 <!--
   ============================================
   포커 핸드 로거 (Poker Hand Logger)
-  Version: 3.4.10
-  Last Modified: 2025-09-18 KST
+  Version: 3.4.25
+  Last Modified: 2025-09-19 KST
 
   Change Log:
+  - v3.4.25 (2025-09-19): ActionOrderManagerV2 완전 통합
+    • 기존 ActionOrderManager 제거
+    • 절대 순위 시스템으로 전면 교체
+    • 핸드별 고정 순서로 안정성 향상
+    • 폴드/올인 시에도 순서 유지
   - v3.4.10 (2025-09-18): GitHub 저장소 구조 통합 및 간소화
     • 파일들을 루트 레벨로 이동 (virtual_data 서브폴더 제거)
     • GitHub Pages 경로 단순화: garimto81.github.io/virtual_data
@@ -134,6 +139,8 @@
   <script src="archive/offline-storage.js?v=3.2.5" defer></script>
   <!-- 모달 자동 닫기 모듈 -->
   <script src="src/js/modal-auto-close.js?v=1.0.0" defer></script>
+  <!-- 액션 순서 관리자 V2 - 절대 순위 시스템 -->
+  <script src="src/js/action-order-manager-v2.js?v=2.0.0" defer></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@700&family=Noto+Sans+KR:wght@400;500;700&display=swap');
     html, body { height: 100vh; overflow: hidden; font-family: 'Noto Sans KR', sans-serif; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
@@ -731,7 +738,7 @@
   // ========================================
   // 중앙 버전 관리 시스템
   // ========================================
-  const APP_VERSION = 'v3.4.24';
+  const APP_VERSION = 'v3.4.25';
   const VERSION_DATE = '2025-09-19';
   const VERSION_INFO = `포커 핸드 로거 ${APP_VERSION} (${VERSION_DATE})`;
 
@@ -858,7 +865,9 @@
     }
   }
 
-  // 메인 액션 관리자 (기존 + 보안 강화)
+  // 메인 액션 관리자 - ActionOrderManagerV2로 대체됨
+  // 기존 ActionOrderManager 클래스는 src/js/action-order-manager-v2.js로 이동
+  /* Legacy ActionOrderManager removed - using ActionOrderManagerV2 instead
   class ActionOrderManager {
     constructor() {
       this.currentStreet = 'preflop';
@@ -1284,9 +1293,10 @@
       return this.actionMode;
     }
   }
+  */
 
-  // 전역 액션 관리자 인스턴스
-  window.actionManager = new ActionOrderManager();
+  // 전역 액션 관리자 인스턴스 - ActionOrderManagerV2 사용
+  // window.actionManager는 action-order-manager-v2.js에서 생성됨
 
   // 모든 버전 표시를 업데이트하는 함수
   function updateAllVersionDisplays() {
@@ -2318,23 +2328,30 @@
       if(window.state.playersInHand.length<1){ showFeedback('먼저 플레이어를 선택해주세요.', true); return; }
 
       // 액션 관리자 동기화
-      window.actionManager.currentStreet = street;
+      if (window.actionOrderManager) {
+        window.actionOrderManager.currentStreet = street;
+      }
       window.state.currentStreet = street;
       window.state.modalState.actionPadStreet = street;
 
-      const activePlayers = window.actionManager.getActivePlayers(window.state.playersInHand);
+      // ActionOrderManagerV2 사용
+      const actionOrder = window.actionOrderManager ?
+        window.actionOrderManager.getActionOrder(street) : [];
+
+      const activePlayers = actionOrder.filter(p => p.canAct);
       if(activePlayers.length === 0) {
         showFeedback('베팅 가능한 플레이어가 없습니다.', true);
         return;
       }
 
       // 현재 액션할 플레이어
-      const currentPlayer = window.actionManager.getCurrentActionPlayer();
-      const actionOrder = window.actionManager.calculateActionOrder(street);
+      const currentPlayer = window.actionOrderManager ?
+        window.actionOrderManager.getCurrentPlayer(street) : null;
 
       // 액션 모드 토글 버튼
-      const modeIcon = window.actionManager.actionMode === 'auto' ? '🤖' : '👆';
-      const modeText = window.actionManager.actionMode === 'auto' ? '자동 순서' : '수동 선택';
+      const actionMode = window.actionOrderManager?.actionMode || 'auto';
+      const modeIcon = actionMode === 'auto' ? '🤖' : '👆';
+      const modeText = actionMode === 'auto' ? '자동 순서' : '수동 선택';
 
       // 액션 큐 표시
       const queueDisplay = actionOrder.map((p, index) => {
@@ -2385,7 +2402,7 @@
         </div>
 
         <!-- 현재 플레이어 액션 버튼 -->
-        ${currentPlayer && window.actionManager.actionMode === 'auto' ? `
+        ${currentPlayer && actionMode === 'auto' ? `
           <div class="mb-4">
             <div class="text-center text-lg font-bold text-amber-400 mb-3">${currentPlayer.name}의 액션</div>
             <div id="current-player-actions" class="grid grid-cols-2 gap-2">
@@ -2832,6 +2849,7 @@
         return;
       }
 
+      // 로컬 상태 업데이트
       if (action === 'Folds') {
         window.state.playerStatus[playerName] = 'folded';
       } else if (action === 'All In') {
@@ -2842,9 +2860,20 @@
         window.state.playerStatus[playerName] = 'bet';
       }
 
-      // 액션 관리자와 동기화
-      if(window.actionManager && window.actionManager.actionMode === 'auto') {
-        window.actionManager.currentStreet = actionPadStreet;
+      // ActionOrderManagerV2와 동기화
+      if (window.actionOrderManager) {
+        if (action === 'Folds') {
+          window.actionOrderManager.updatePlayerStatus(playerName, 'folded');
+        } else if (action === 'All In') {
+          window.actionOrderManager.updatePlayerStatus(playerName, 'allin');
+        }
+
+        // 다음 플레이어로 이동
+        const nextPlayer = window.actionOrderManager.moveToNextPlayer(actionPadStreet);
+        if (nextPlayer && window.actionOrderManager.actionMode === 'auto') {
+          // 자동 모드인 경우 다음 플레이어 액션 패드 열기 준비
+          window.state.nextPlayerToAct = nextPlayer;
+        }
       }
       
       if (amount){
@@ -4231,9 +4260,24 @@
           }
         }
 
+        // ActionOrderManagerV2 초기화
+        if (window.actionOrderManager && window.state.playersInHand.length > 0) {
+          // 버튼 위치 찾기
+          const buttonPlayer = window.state.playersInHand.find(p => p.role === 'BTN');
+          const buttonPosition = buttonPlayer ?
+            window.state.playersInHand.indexOf(buttonPlayer) + 1 : 1;
+
+          window.actionOrderManager.initializeHand(
+            window.state.playersInHand,
+            buttonPosition,
+            String(handNumber)
+          );
+
+          console.log('✅ ActionOrderManagerV2 초기화 완료');
+        }
+
         renderAll(); saveActionState();
-        
-        
+
         closeModal(el.loadHandModal);
         showFeedback(`#${handNumber} 핸드를 불러왔습니다.`);
       }catch(err){
@@ -4780,6 +4824,12 @@ async function sendDataToGoogleSheet(){
       localStorage.setItem('pokerHandLogger_lastCam2', String(nextCam2));
       console.log(`  → ${window.state.camPreset.cam2} 다음 번호: ${nextCam2}`);
       
+      // ActionOrderManagerV2 초기화 (핸드 종료)
+      if (window.actionOrderManager) {
+        window.actionOrderManager.endHand();
+        console.log('✅ ActionOrderManagerV2 핸드 종료 및 리셋');
+      }
+
       renderAll(); saveActionState();
 
       // Ante 체크박스 상태 동기화 (v3.4.23)
