@@ -123,7 +123,7 @@
   <meta http-equiv="cache-control" content="no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="pragma" content="no-cache" />
   <meta http-equiv="expires" content="0" />
-  <title>포커 핸드 로거 v3.4.29</title>
+  <title>포커 핸드 로거 v3.4.32</title>
   <script src="https://cdn-tailwindcss.vercel.app/"></script>
   <script src="archive/chip-analysis-module.js?v=3.0.0" defer></script>
   <!-- 테이블 관리 모듈 v59 - IN/OUT 두 가지 상태만 사용 -->
@@ -767,7 +767,7 @@
   // ========================================
   // 중앙 버전 관리 시스템
   // ========================================
-  const APP_VERSION = 'v3.4.29';
+  const APP_VERSION = 'v3.4.32';
   const VERSION_DATE = '2025-09-19';
   const VERSION_INFO = `포커 핸드 로거 ${APP_VERSION} (${VERSION_DATE})`;
 
@@ -3783,7 +3783,7 @@
       const actions = window.state.actionState[street];
       let lastBet = null;
       let requiredAmt = 0;
-      
+
       // 현재 스트리트에서만 마지막 베팅 찾기 (각 스트리트는 독립적)
       for(let i = actions.length - 1; i >= 0; i--) {
         const action = actions[i];
@@ -3792,10 +3792,18 @@
           break;
         }
       }
-      
+
       const p = window.state.playersInHand.find(pp => pp.name === player);
-      const playerChips = p ? parseInt(unformatNumber(p.chips), 10) : 0;
-      
+      if (!p) {
+        console.error(`플레이어를 찾을 수 없음: ${player}`, {
+          playersInHand: window.state.playersInHand,
+          playerName: player
+        });
+        return { action: 'Checks', amount: null, label: 'Check' };
+      }
+
+      const playerChips = parseInt(unformatNumber(p.chips), 10) || 0;
+
       if(!lastBet) {
         // 현재 스트리트에 베팅 없음 → CHECK
         if(street === 'preflop') {
@@ -5038,19 +5046,28 @@ async function sendDataToGoogleSheet(){
 
       // 2) 짝의 값 기반 자동 증가
       if (which==='cam2' && window.state.camNumbers.cam1no){
-        return pad4((parseInt(window.state.camNumbers.cam1no,10)||0)+1);
+        const cam1Num = parseInt(String(window.state.camNumbers.cam1no).replace(/\D/g, ''), 10) || 0;
+        const nextNum = cam1Num + 1;
+        console.log(`💡 computeCamPrefill cam2: cam1=${window.state.camNumbers.cam1no} → ${cam1Num} → ${nextNum}`);
+        return pad4(nextNum);
       }
       if (which==='cam1' && window.state.camNumbers.cam2no){
-        const v = (parseInt(window.state.camNumbers.cam2no,10)||0)-1;
-        return pad4(v<0?0:v);
+        const cam2Num = parseInt(String(window.state.camNumbers.cam2no).replace(/\D/g, ''), 10) || 0;
+        const prevNum = Math.max(0, cam2Num - 1);
+        console.log(`💡 computeCamPrefill cam1: cam2=${window.state.camNumbers.cam2no} → ${cam2Num} → ${prevNum}`);
+        return pad4(prevNum);
       }
 
       // 3) 마지막 입력(세션 기준) +1
       if (window.state.lastCamNo!=null){
-        return pad4((parseInt(window.state.lastCamNo,10)||0)+1);
+        const lastNum = parseInt(String(window.state.lastCamNo).replace(/\D/g, ''), 10) || 0;
+        const nextNum = lastNum + 1;
+        console.log(`💡 computeCamPrefill ${which}: lastCamNo=${window.state.lastCamNo} → ${lastNum} → ${nextNum}`);
+        return pad4(nextNum);
       }
 
       // 4) 기본값
+      console.log(`💡 computeCamPrefill ${which}: 기본값 0001 반환`);
       return '0001';
     }
 
@@ -5062,16 +5079,21 @@ async function sendDataToGoogleSheet(){
 
       // 2) 짝의 값 기반 자동 증가
       if (which === 'cam2' && window.state.camNumbers.cam1no) {
-        return String((parseInt(window.state.camNumbers.cam1no, 10) || 0) + 1);
+        const cam1Num = parseInt(String(window.state.camNumbers.cam1no).replace(/\D/g, ''), 10) || 0;
+        const nextNum = cam1Num + 1;
+        return String(nextNum);
       }
       if (which === 'cam1' && window.state.camNumbers.cam2no) {
-        const v = (parseInt(window.state.camNumbers.cam2no, 10) || 0) - 1;
-        return String(v < 0 ? 0 : v);  // 0보다 작으면 0으로
+        const cam2Num = parseInt(String(window.state.camNumbers.cam2no).replace(/\D/g, ''), 10) || 0;
+        const prevNum = Math.max(0, cam2Num - 1);
+        return String(prevNum);
       }
 
       // 3) 마지막 입력(세션 기준) +1
       if (window.state.lastCamNo != null) {
-        return String((parseInt(window.state.lastCamNo, 10) || 0) + 1);
+        const lastNum = parseInt(String(window.state.lastCamNo).replace(/\D/g, ''), 10) || 0;
+        const nextNum = lastNum + 1;
+        return String(nextNum);
       }
 
       // 4) 현재 표시된 카메라 값에서 패딩을 제거한 숫자값 반환
@@ -5221,33 +5243,27 @@ async function sendDataToGoogleSheet(){
       // localStorage에서 마지막 카메라 번호 읽기
       const savedCam1 = localStorage.getItem('pokerHandLogger_lastCam1') || '';
       const savedCam2 = localStorage.getItem('pokerHandLogger_lastCam2') || '';
-      
-      console.log('📷 새 핸드 - 카메라 번호 자동 증가:');
+
+      console.log('📷 새 핸드 - 카메라 번호 유지 (증가 안함):');
       console.log(`  localStorage cam1: ${savedCam1 || '없음'}`);
       console.log(`  localStorage cam2: ${savedCam2 || '없음'}`);
       console.log(`  현재 cam1: ${lastCam1 || '없음'}`);
       console.log(`  현재 cam2: ${lastCam2 || '없음'}`);
-      
-      // 카메라 번호 자동 증가
-      // cam1 처리: 저장된 번호 또는 현재 번호에서 +1
-      const cam1Base = savedCam1 || lastCam1 || '0';
-      const currentNum1 = parseInt(cam1Base, 10) || 0;
-      const nextCam1 = currentNum1 > 0 ? currentNum1 + 1 : 1;
-      window.state.camNumbers.cam1no = String(nextCam1);
-      window.state.lastCamNo = String(nextCam1);
-      el.cam1.textContent = `${window.state.camPreset.cam1}${pad4(nextCam1)}`;
-      localStorage.setItem('pokerHandLogger_lastCam1', String(nextCam1));
-      console.log(`  → ${window.state.camPreset.cam1} 다음 번호: ${nextCam1}`);
-      
-      // cam2 처리: 저장된 번호 또는 현재 번호에서 +1
-      const cam2Base = savedCam2 || lastCam2 || '0';
-      const currentNum2 = parseInt(cam2Base, 10) || 0;
-      const nextCam2 = currentNum2 > 0 ? currentNum2 + 1 : 1;
-      window.state.camNumbers.cam2no = String(nextCam2);
-      window.state.lastCamNo = String(nextCam2);
-      el.cam2.textContent = `${window.state.camPreset.cam2}${pad4(nextCam2)}`;
-      localStorage.setItem('pokerHandLogger_lastCam2', String(nextCam2));
-      console.log(`  → ${window.state.camPreset.cam2} 다음 번호: ${nextCam2}`);
+
+      // 카메라 번호 유지 (자동 증가 제거)
+      // cam1 처리: 현재 번호 유지, 없으면 초기값
+      const cam1Current = lastCam1 || savedCam1 || '1';
+      window.state.camNumbers.cam1no = String(cam1Current);
+      el.cam1.textContent = `${window.state.camPreset.cam1}${pad4(cam1Current)}`;
+      console.log(`  → ${window.state.camPreset.cam1} 현재 번호 유지: ${cam1Current}`);
+
+      // cam2 처리: 현재 번호 유지, 없으면 초기값
+      const cam2Current = lastCam2 || savedCam2 || '1';
+      window.state.camNumbers.cam2no = String(cam2Current);
+      el.cam2.textContent = `${window.state.camPreset.cam2}${pad4(cam2Current)}`;
+      console.log(`  → ${window.state.camPreset.cam2} 현재 번호 유지: ${cam2Current}`);
+
+      // lastCamNo는 실제 카메라 사용 시에만 업데이트 (여기서는 업데이트 안함)
       
       // ActionOrderManagerV2 초기화 (핸드 종료)
       if (window.actionOrderManager) {
@@ -5914,21 +5930,27 @@ async function sendDataToGoogleSheet(){
           const { purpose, currentPot } = window.state.modalState.keypadOptions;
           if(purpose==='cam'){
             const which = window.state.modalState.keypadOptions.cam; // 'cam1'|'cam2'
-            const padded = pad4(finalAmt);
-            const numValue = String(finalAmt); // 숫자만 저장 (0007 → 7)
+            // 안전한 숫자 변환: 숫자가 아닌 문자 제거 후 parseInt
+            const cleanAmt = String(finalAmt).replace(/\D/g, '');
+            const numValue = parseInt(cleanAmt, 10) || 0;
+            const numValueStr = String(numValue); // 순수 숫자를 문자열로
+            const padded = pad4(numValue); // 패딩된 표시용
+
+            console.log(`🔧 카메라 번호 저장: 입력="${finalAmt}" → 정제="${cleanAmt}" → 숫자=${numValue} → 문자열="${numValueStr}"`);
+
             if (which==='cam1'){
-              window.state.camNumbers.cam1no = numValue; // 숫자로 저장
-              window.state.lastCamNo = numValue;
+              window.state.camNumbers.cam1no = numValueStr; // 순수 숫자를 문자열로 저장
+              window.state.lastCamNo = numValueStr;
               el.cam1.textContent = `${window.state.camPreset.cam1}${padded}`; // 표시는 패딩된 형태로
-              localStorage.setItem('pokerHandLogger_lastCam1', numValue); // localStorage에 숫자로 저장
+              localStorage.setItem('pokerHandLogger_lastCam1', numValueStr); // localStorage에 숫자로 저장
               showFeedback(`${window.state.camPreset.cam1 || 'Cam1'}${padded} 입력됨`);
-              console.log(`📷 cam1 저장: ${window.state.camPreset.cam1}=${numValue}`);
+              console.log(`📷 cam1 저장: ${window.state.camPreset.cam1}=${numValueStr}`);
             }else if (which==='cam2'){
-              window.state.camNumbers.cam2no = numValue; // 숫자로 저장
-              window.state.lastCamNo = numValue;
+              window.state.camNumbers.cam2no = numValueStr; // 순수 숫자를 문자열로 저장
+              window.state.lastCamNo = numValueStr;
               el.cam2.textContent = `${window.state.camPreset.cam2}${padded}`; // 표시는 패딩된 형태로
-              localStorage.setItem('pokerHandLogger_lastCam2', numValue); // localStorage에 숫자로 저장
-              console.log(`📷 cam2 저장: ${window.state.camPreset.cam2}=${numValue}`);
+              localStorage.setItem('pokerHandLogger_lastCam2', numValueStr); // localStorage에 숫자로 저장
+              console.log(`📷 cam2 저장: ${window.state.camPreset.cam2}=${numValueStr}`);
               showFeedback(`${window.state.camPreset.cam2 || 'Cam2'}${padded} 입력됨`);
             }
           }else if(purpose==='bet'){
