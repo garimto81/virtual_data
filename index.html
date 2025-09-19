@@ -123,7 +123,7 @@
   <meta http-equiv="cache-control" content="no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="pragma" content="no-cache" />
   <meta http-equiv="expires" content="0" />
-  <title>포커 핸드 로거 v3.4.27</title>
+  <title>포커 핸드 로거 v3.4.28</title>
   <script src="https://cdn-tailwindcss.vercel.app/"></script>
   <script src="archive/chip-analysis-module.js?v=3.0.0" defer></script>
   <!-- 테이블 관리 모듈 v59 - IN/OUT 두 가지 상태만 사용 -->
@@ -767,7 +767,7 @@
   // ========================================
   // 중앙 버전 관리 시스템
   // ========================================
-  const APP_VERSION = 'v3.4.27';
+  const APP_VERSION = 'v3.4.28';
   const VERSION_DATE = '2025-09-19';
   const VERSION_INFO = `포커 핸드 로거 ${APP_VERSION} (${VERSION_DATE})`;
 
@@ -2664,28 +2664,48 @@
 
       const activePlayers = actionOrder.filter(p => p.canAct);
 
-      // 디버그 정보 추가
-      console.log('=== openActionPad 디버그 ===');
-      console.log('현재 스트리트:', street);
-      console.log('액션 순서:', actionOrder);
-      console.log('활성 플레이어:', activePlayers);
-      console.log('ActionOrderManager 상태:', window.actionOrderManager?.playerStatus);
-      console.log('전체 플레이어:', window.state.playersInHand);
-
       if(activePlayers.length === 0) {
-        // 추가 디버그 정보
-        console.error('베팅 가능한 플레이어 없음 - 상세 정보:');
-        console.error('- ActionOrderManager 초기화 여부:', !!window.actionOrderManager);
-        console.error('- HandNumber:', window.actionOrderManager?.handNumber);
-        console.error('- ButtonPosition:', window.actionOrderManager?.buttonPosition);
+        // ActionOrderManager가 초기화되지 않은 경우 자동 초기화 시도
+        if (!window.actionOrderManager?.handNumber && window.state.playersInHand.length > 0) {
+          console.warn('ActionOrderManager가 초기화되지 않음 - 자동 초기화 시도');
 
-        // ActionOrderManager 디버그 출력 시도
-        if (window.actionOrderManager && typeof window.actionOrderManager.debug === 'function') {
-          window.actionOrderManager.debug();
+          const handNumber = window.state.actionState.handNumber || '1';
+          const buttonPosition = parseInt(window.state.playersInHand[0]?.seat) || 1;
+
+          window.actionOrderManager.initializeHand(
+            window.state.playersInHand,
+            buttonPosition,
+            String(handNumber)
+          );
+
+          console.log('✅ openActionPad에서 자동 초기화 완료');
+
+          // 재시도
+          const retryActionOrder = window.actionOrderManager.getActionOrder(street);
+          const retryActivePlayers = retryActionOrder.filter(p => p.canAct);
+
+          if (retryActivePlayers.length > 0) {
+            // 성공적으로 초기화됨 - 계속 진행
+            console.log('재시도 성공:', retryActivePlayers);
+            // actionOrder와 activePlayers 업데이트
+            actionOrder.length = 0;
+            actionOrder.push(...retryActionOrder);
+            activePlayers.length = 0;
+            activePlayers.push(...retryActivePlayers);
+          }
         }
 
-        showFeedback('베팅 가능한 플레이어가 없습니다.', true);
-        return;
+        // 여전히 활성 플레이어가 없는 경우
+        if (activePlayers.length === 0) {
+          console.error('베팅 가능한 플레이어 없음:', {
+            handNumber: window.actionOrderManager?.handNumber,
+            playersCount: window.state.playersInHand.length,
+            buttonPosition: window.actionOrderManager?.buttonPosition
+          });
+
+          showFeedback('베팅 가능한 플레이어가 없습니다. 플레이어를 먼저 선택해주세요.', true);
+          return;
+        }
       }
 
       // 현재 액션할 플레이어
@@ -3056,6 +3076,33 @@
           delete window.state.seatMap[player.seat];
         }
         console.log(`➖ ${name} 게임에서 제외 (Seat ${player.seat})`);
+
+        // 플레이어 제거 후 ActionOrderManager 재초기화
+        if (window.actionOrderManager && window.state.playersInHand.length > 0) {
+          const handNumber = window.state.actionState.handNumber || '1';
+          const buttonPosition = parseInt(window.state.playersInHand[0]?.seat) || 1;
+
+          console.log('플레이어 제거 시 ActionOrderManager 초기화:', {
+            playersCount: window.state.playersInHand.length,
+            buttonPosition,
+            handNumber,
+            removedPlayer: name
+          });
+
+          window.actionOrderManager.initializeHand(
+            window.state.playersInHand,
+            buttonPosition,
+            String(handNumber)
+          );
+
+          console.log('✅ 플레이어 제거 후 ActionOrderManager 초기화 완료');
+        } else if (window.state.playersInHand.length === 0) {
+          // 모든 플레이어가 제거된 경우 ActionOrderManager 종료
+          if (window.actionOrderManager) {
+            window.actionOrderManager.endHand();
+            console.log('✅ 모든 플레이어 제거 - ActionOrderManager 종료');
+          }
+        }
       } else {
         // 플레이어 추가 (게임에 참여)
         const pool=window.state.playerDataByTable[window.state.selectedTable]||[];
@@ -3074,15 +3121,36 @@
         // 새 플레이어 추가 시 initialChips를 현재 칩으로 설정
         console.log(`➕ ${name} 게임 참여: 시작칩 = ${chips}, 좌석 = ${seat}`);
         window.state.playersInHand.push({
-          name, 
-          hand:[], 
-          chips, 
+          name,
+          hand:[],
+          chips,
           initialChips:chips,  // 시작칩은 현재 칩 값으로 설정
           role:null,
           notable:notable,  // Notable 정보 추가
           seat:seat,  // Seat 정보 유지
           chipsSetAt: new Date().toISOString()  // 칩 설정 시간 기록
         });
+
+        // 플레이어가 추가될 때마다 ActionOrderManager 재초기화
+        if (window.actionOrderManager && window.state.playersInHand.length > 0) {
+          const handNumber = window.state.actionState.handNumber || '1';
+          const buttonPosition = parseInt(seat) || 1;
+
+          console.log('플레이어 추가 시 ActionOrderManager 초기화:', {
+            playersCount: window.state.playersInHand.length,
+            buttonPosition,
+            handNumber,
+            newPlayer: name
+          });
+
+          window.actionOrderManager.initializeHand(
+            window.state.playersInHand,
+            buttonPosition,
+            String(handNumber)
+          );
+
+          console.log('✅ 플레이어 추가 후 ActionOrderManager 초기화 완료');
+        }
       }
       renderPlayerSelection(); 
       renderPlayerDetails(); 
