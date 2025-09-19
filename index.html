@@ -123,7 +123,7 @@
   <meta http-equiv="cache-control" content="no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="pragma" content="no-cache" />
   <meta http-equiv="expires" content="0" />
-  <title>포커 핸드 로거 v3.4.32</title>
+  <title>포커 핸드 로거 v3.4.33</title>
   <script src="https://cdn-tailwindcss.vercel.app/"></script>
   <script src="archive/chip-analysis-module.js?v=3.0.0" defer></script>
   <!-- 테이블 관리 모듈 v59 - IN/OUT 두 가지 상태만 사용 -->
@@ -767,7 +767,7 @@
   // ========================================
   // 중앙 버전 관리 시스템
   // ========================================
-  const APP_VERSION = 'v3.4.32';
+  const APP_VERSION = 'v3.4.33';
   const VERSION_DATE = '2025-09-19';
   const VERSION_INFO = `포커 핸드 로거 ${APP_VERSION} (${VERSION_DATE})`;
 
@@ -2739,13 +2739,23 @@
       // Check/Call 액션 결정 (현재 플레이어용)
       let checkCallButtonHTML = '';
       if(currentPlayer) {
-        const smartAction = getSmartCheckCallAction(currentPlayer.name, street);
+        console.log('🎯 currentPlayer 객체 확인:', currentPlayer);
+        console.log('🎯 currentPlayer.name:', currentPlayer.name);
+        console.log('🎯 currentPlayer.player:', currentPlayer.player);
+
+        const playerName = currentPlayer.name || currentPlayer.player;
+        if (!playerName) {
+          console.error('❌ 플레이어 이름을 찾을 수 없음:', currentPlayer);
+          return;
+        }
+
+        const smartAction = getSmartCheckCallAction(playerName, street);
         const btnColor = smartAction.action === 'Checks' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700';
         const btnIcon = smartAction.action === 'Checks' ? '✅' : '📞';
         const btnText = smartAction.action === 'Checks' ? 'Check' : `Call ${formatNumber(smartAction.amount)}`;
 
         checkCallButtonHTML = `
-          <button id="smart-check-call-btn" class="btn ${btnColor} p-3 rounded-md" data-action="SmartCheckCall" data-player="${currentPlayer.name}">
+          <button id="smart-check-call-btn" class="btn ${btnColor} p-3 rounded-md" data-action="SmartCheckCall" data-player="${playerName}">
             ${btnIcon} ${btnText}
           </button>`;
       }
