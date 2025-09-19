@@ -123,7 +123,7 @@
   <meta http-equiv="cache-control" content="no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="pragma" content="no-cache" />
   <meta http-equiv="expires" content="0" />
-  <title>포커 핸드 로거 v3.4.37</title>
+  <title>포커 핸드 로거 v3.4.38</title>
   <script src="https://cdn-tailwindcss.vercel.app/"></script>
   <script src="archive/chip-analysis-module.js?v=3.0.0" defer></script>
   <!-- 테이블 관리 모듈 v59 - IN/OUT 두 가지 상태만 사용 -->
@@ -767,7 +767,7 @@
   // ========================================
   // 중앙 버전 관리 시스템
   // ========================================
-  const APP_VERSION = 'v3.4.37';
+  const APP_VERSION = 'v3.4.38';
   const VERSION_DATE = '2025-09-19';
   const VERSION_INFO = `포커 핸드 로거 ${APP_VERSION} (${VERSION_DATE})`;
 
@@ -2838,43 +2838,20 @@
     // 플레이어 액션 실행 함수 (보안 레이어 포함)
     async function executePlayerAction(playerName, action, btn) {
       const modal = el.actionPadModal;
-      const manager = window.actionManager;
-
-      // Layer 6: 뮤텍스 체크 (동시 액션 방지)
-      if (manager.isProcessing) {
-        console.warn('이미 액션이 처리 중입니다');
-        showFeedback('⚠️ 이전 액션 처리 중...', true);
-        return;
-      }
-
-      manager.isProcessing = true;
+      const manager = window.actionOrderManager;
 
       try {
-        // Layer 1: 타임스탬프 생성 (로깅용)
-        const timestamp = manager.timekeeper.generateTimestamp();
-        manager.timekeeper.validateAndUpdate(timestamp);
-
-        // Layer 2: Rate monitoring (로깅용)
-        manager.rateLimiter.check(playerName);
-
-        // Layer 3: 플레이어 검증 (자동 등록 제거)
-        // manager.stateValidator.validatePlayer(playerName); // 중복 등록 방지를 위해 제거
-
         // 현재 플레이어 확인 (자동 모드)
-        if (manager.actionMode === 'auto') {
-          const currentPlayer = manager.getCurrentActionPlayer();
+        if (manager?.actionMode === 'auto') {
+          const currentPlayer = manager.getCurrentPlayer();
           if (currentPlayer && (currentPlayer.name || currentPlayer.player) !== playerName) {
             console.log(`순서 밖 액션: ${playerName} (현재: ${currentPlayer.name || currentPlayer.player})`);
             // 그래도 허용
           }
         }
 
-        // Layer 5: 트랜잭션 시작
-        const transaction = manager.startTransaction();
-
-        try {
-          // 현재 플레이어를 actionPadPlayer로 설정
-          window.state.modalState.actionPadPlayer = playerName;
+        // 현재 플레이어를 actionPadPlayer로 설정
+        window.state.modalState.actionPadPlayer = playerName;
 
           // 액션 처리
           if(action === 'SmartCheckCall') {
@@ -2899,18 +2876,11 @@
             window.state.modalState.actionPadCurrentAction = hasBet ? 'Raises' : 'Bets';
 
             openKeypad(null, { purpose: 'bet', playerName: playerName });
-            manager.isProcessing = false; // 키패드 대기 중 처리 해제
             return;
           }
 
-          // 상태 해시 업데이트
-          manager.stateValidator.updateState();
-
-          // 트랜잭션 커밋
-          transaction.commit();
-
           // 자동 모드에서 다음 플레이어로 이동
-          if(manager.actionMode === 'auto') {
+          if(manager?.actionMode === 'auto') {
             const nextPlayer = manager.moveToNextPlayer();
 
             showFeedback(`✅ ${playerName} ${action}`, false);
@@ -2922,33 +2892,17 @@
               }, 300);
             } else {
               closeModal(modal);
-
-              // 스트릿 완료 체크
-              if (manager.isBettingRoundComplete()) {
-                showFeedback(`🎯 ${manager.currentStreet.toUpperCase()} 완료! 다음 스트릿 준비...`, false);
-
-                // 자동으로 다음 스트릿 진행
-                setTimeout(() => {
-                  manager.advanceToNextStreet();
-                }, 500);
-              }
+              showFeedback(`🎯 ${manager.currentStreet?.toUpperCase() || 'STREET'} 완료!`, false);
             }
           } else {
             closeModal(modal);
             showFeedback(`✅ ${playerName} ${action}`, false);
           }
 
-        } catch (innerError) {
-          // 에러가 발생해도 계속 진행
-          console.warn('액션 처리 중 경고:', innerError.message);
-          transaction.rollback();
-        }
-
       } catch (error) {
         // 에러 로그만 출력하고 계속 진행
         console.log('액션 처리 중 예외:', error.message);
-      } finally {
-        manager.isProcessing = false;
+        showFeedback('⚠️ 액션 처리 중 오류가 발생했습니다', true);
       }
     }
 
