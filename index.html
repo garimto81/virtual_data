@@ -123,7 +123,7 @@
   <meta http-equiv="cache-control" content="no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="pragma" content="no-cache" />
   <meta http-equiv="expires" content="0" />
-  <title>포커 핸드 로거 v3.4.36</title>
+  <title>포커 핸드 로거 v3.4.37</title>
   <script src="https://cdn-tailwindcss.vercel.app/"></script>
   <script src="archive/chip-analysis-module.js?v=3.0.0" defer></script>
   <!-- 테이블 관리 모듈 v59 - IN/OUT 두 가지 상태만 사용 -->
@@ -767,7 +767,7 @@
   // ========================================
   // 중앙 버전 관리 시스템
   // ========================================
-  const APP_VERSION = 'v3.4.36';
+  const APP_VERSION = 'v3.4.37';
   const VERSION_DATE = '2025-09-19';
   const VERSION_INFO = `포커 핸드 로거 ${APP_VERSION} (${VERSION_DATE})`;
 
@@ -2798,7 +2798,7 @@
         ` : ''}
 
         <!-- 수동 모드 또는 모든 플레이어 선택 -->
-        ${window.actionManager.actionMode === 'manual' || !currentPlayer ? `
+        ${actionMode === 'manual' || !currentPlayer ? `
           <div class="mb-4">
             <div class="text-sm text-gray-400 mb-2">플레이어 선택:</div>
             <div id="action-pad-players" class="grid grid-cols-3 gap-2 mb-3">
@@ -2823,7 +2823,7 @@
 
         <!-- 컨트롤 버튼 -->
         <div class="flex gap-2">
-          ${window.actionManager.actionMode === 'auto' && currentPlayer ? `
+          ${actionMode === 'auto' && currentPlayer ? `
             <button id="skip-current-player" class="btn bg-yellow-600 hover:bg-yellow-700 px-3 py-2 rounded text-sm">
               ⏭️ 스킵
             </button>
@@ -5653,23 +5653,23 @@ async function sendDataToGoogleSheet(){
 
         // 액션 모드 토글
         if(btn.id==='toggle-action-mode') {
-          const newMode = window.actionManager.toggleMode();
+          const newMode = window.actionOrderManager.toggleMode();
           showFeedback(`액션 모드: ${newMode === 'auto' ? '🤖 자동 순서' : '👆 수동 선택'}`, false);
           // 모달 다시 열기 (UI 업데이트)
-          openActionPad(window.actionManager.currentStreet);
+          openActionPad(window.actionOrderManager.currentStreet);
           return;
         }
 
         // 현재 플레이어 스킵
         if(btn.id==='skip-current-player') {
-          const nextPlayer = window.actionManager.moveToNextPlayer();
-          showFeedback(`플레이어 스킵됨. ${nextPlayer ? `다음: ${nextPlayer.name}` : '스트릿 완료'}`, false);
-          openActionPad(window.actionManager.currentStreet);
+          const nextPlayer = window.actionOrderManager.moveToNextPlayer();
+          showFeedback(`플레이어 스킵됨. ${nextPlayer ? `다음: ${nextPlayer.name || nextPlayer.player}` : '스트릿 완료'}`, false);
+          openActionPad(window.actionOrderManager.currentStreet);
           return;
         }
 
         // 자동 모드에서 현재 플레이어 액션
-        if(btn.dataset.player && window.actionManager.actionMode === 'auto') {
+        if(btn.dataset.player && window.actionOrderManager?.actionMode === 'auto') {
           const playerName = btn.dataset.player;
           const action = btn.dataset.action;
 
@@ -5988,15 +5988,15 @@ async function sendDataToGoogleSheet(){
               addActionToLog(window.state.modalState.actionPadCurrentAction, finalAmt, actualPlayerName);
 
               // 자동 모드에서 다음 플레이어로 이동
-              if(window.actionManager && window.actionManager.actionMode === 'auto') {
-                const nextPlayer = window.actionManager.moveToNextPlayer();
+              if(window.actionOrderManager && window.actionOrderManager.actionMode === 'auto') {
+                const nextPlayer = window.actionOrderManager.moveToNextPlayer();
                 showFeedback(`${playerName} ${window.state.modalState.actionPadCurrentAction} ${formatNumber(finalAmt)}`, false);
 
                 if(nextPlayer) {
-                  openActionPad(window.actionManager.currentStreet);
+                  openActionPad(window.actionOrderManager.currentStreet);
                 } else {
                   setTimeout(() => {
-                    showFeedback(`${window.actionManager.currentStreet.toUpperCase()} 스트릿 완료`, false);
+                    showFeedback(`${window.actionOrderManager.currentStreet.toUpperCase()} 스트릿 완료`, false);
                   }, 500);
                 }
               }
