@@ -255,31 +255,56 @@ class ActionOrderManagerV2 {
             positions.push({ player, seat, position, index: i });
         }
 
-        // 프리플랍 액션 순서: UTG → BTN → SB → BB
-        // UTG부터 시작
-        for (let i = 2; i < totalPlayers; i++) {
+        // 플레이어 수별 순서 처리
+        if (totalPlayers === 1) {
+            // 1명: 혼자이므로 BTN/SB/BB 역할을 모두 담당
             order.push({
-                player: positions[i].player.name,
-                seat: positions[i].seat,
-                position: positions[i].position,
+                player: positions[0].player.name,
+                seat: positions[0].seat,
+                position: 'BTN/SB/BB',
+                priority: order.length
+            });
+        } else if (totalPlayers === 2) {
+            // 2명: SB가 버튼, BB 순서
+            order.push({
+                player: positions[0].player.name, // SB (버튼)
+                seat: positions[0].seat,
+                position: 'SB/BTN',
+                priority: order.length
+            });
+            order.push({
+                player: positions[1].player.name, // BB
+                seat: positions[1].seat,
+                position: 'BB',
+                priority: order.length
+            });
+        } else {
+            // 3명 이상: 프리플랍 액션 순서: UTG → BTN → SB → BB
+            // UTG부터 시작
+            for (let i = 2; i < totalPlayers; i++) {
+                order.push({
+                    player: positions[i].player.name,
+                    seat: positions[i].seat,
+                    position: positions[i].position,
+                    priority: order.length
+                });
+            }
+
+            // SB, BB 마지막에 추가
+            order.push({
+                player: positions[0].player.name,
+                seat: positions[0].seat,
+                position: 'SB',
+                priority: order.length
+            });
+
+            order.push({
+                player: positions[1].player.name,
+                seat: positions[1].seat,
+                position: 'BB',
                 priority: order.length
             });
         }
-
-        // SB, BB 마지막에 추가
-        order.push({
-            player: positions[0].player.name,
-            seat: positions[0].seat,
-            position: 'SB',
-            priority: order.length
-        });
-
-        order.push({
-            player: positions[1].player.name,
-            seat: positions[1].seat,
-            position: 'BB',
-            priority: order.length
-        });
 
         return order;
     }
@@ -319,29 +344,51 @@ class ActionOrderManagerV2 {
             return order;
         }
 
-        // 포스트플랍 액션 순서: SB → BB → UTG → ... → BTN
-        for (let i = 0; i < totalPlayers; i++) {
-            const seatIndex = (btnIndex + i + 1) % totalPlayers;
+        // 플레이어 수별 포스트플랍 순서 처리
+        if (totalPlayers === 1) {
+            // 1명: 혼자이므로 모든 역할
+            const seatIndex = btnIndex;
             const seat = occupiedSeats[seatIndex];
             const player = seatMap.get(seat);
-
-            let position;
-            if (i === 0) position = 'SB';
-            else if (i === 1) position = 'BB';
-            else if (i === totalPlayers - 1) position = 'BTN';
-            else if (i === 2) position = 'UTG';
-            else if (i === 3) position = 'UTG+1';
-            else if (i === 4) position = 'MP1';
-            else if (i === 5) position = 'MP2';
-            else if (i === totalPlayers - 2) position = 'CO';
-            else position = `MP${i-2}`;
 
             order.push({
                 player: player.name,
                 seat: seat,
-                position: position,
-                priority: i
+                position: 'BTN/SB/BB',
+                priority: 0
             });
+        } else {
+            // 2명 이상: 포스트플랍 액션 순서: SB → BB → UTG → ... → BTN
+            for (let i = 0; i < totalPlayers; i++) {
+                const seatIndex = (btnIndex + i + 1) % totalPlayers;
+                const seat = occupiedSeats[seatIndex];
+                const player = seatMap.get(seat);
+
+                let position;
+                if (totalPlayers === 2) {
+                    // 2명: SB(BTN) → BB 순서
+                    if (i === 0) position = 'SB/BTN';
+                    else position = 'BB';
+                } else {
+                    // 3명 이상
+                    if (i === 0) position = 'SB';
+                    else if (i === 1) position = 'BB';
+                    else if (i === totalPlayers - 1) position = 'BTN';
+                    else if (i === 2) position = 'UTG';
+                    else if (i === 3) position = 'UTG+1';
+                    else if (i === 4) position = 'MP1';
+                    else if (i === 5) position = 'MP2';
+                    else if (i === totalPlayers - 2) position = 'CO';
+                    else position = `MP${i-2}`;
+                }
+
+                order.push({
+                    player: player.name,
+                    seat: seat,
+                    position: position,
+                    priority: i
+                });
+            }
         }
 
         return order;
