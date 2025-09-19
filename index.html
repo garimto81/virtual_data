@@ -123,7 +123,7 @@
   <meta http-equiv="cache-control" content="no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="pragma" content="no-cache" />
   <meta http-equiv="expires" content="0" />
-  <title>포커 핸드 로거 v3.4.40</title>
+  <title>포커 핸드 로거 v3.4.41-debug</title>
   <script src="https://cdn-tailwindcss.vercel.app/"></script>
   <script src="archive/chip-analysis-module.js?v=3.0.0" defer></script>
   <!-- 테이블 관리 모듈 v59 - IN/OUT 두 가지 상태만 사용 -->
@@ -767,7 +767,7 @@
   // ========================================
   // 중앙 버전 관리 시스템
   // ========================================
-  const APP_VERSION = 'v3.4.40';
+  const APP_VERSION = 'v3.4.41-debug';
   const VERSION_DATE = '2025-09-19';
   const VERSION_INFO = `포커 핸드 로거 ${APP_VERSION} (${VERSION_DATE})`;
 
@@ -5597,7 +5597,19 @@ async function sendDataToGoogleSheet(){
           return;
         }
 
-        const btn = e.target.closest('button'); if(!btn) return;
+        const btn = e.target.closest('button');
+        if(!btn) {
+          console.log('🚫 버튼이 아닌 요소 클릭됨:', e.target);
+          return;
+        }
+
+        console.log('🔍 버튼 클릭됨:', {
+          id: btn.id,
+          className: btn.className,
+          dataset: btn.dataset,
+          parentId: btn.parentElement?.id,
+          actionMode: window.actionOrderManager?.actionMode
+        });
 
         // 닫기 버튼
         if(btn.id==='close-action-pad'){
@@ -5624,6 +5636,10 @@ async function sendDataToGoogleSheet(){
 
         // 자동 모드에서 현재 플레이어 액션
         if(btn.dataset.player && window.actionOrderManager?.actionMode === 'auto') {
+          console.log('✅ 자동 모드 액션 실행:', {
+            player: btn.dataset.player,
+            action: btn.dataset.action
+          });
           const playerName = btn.dataset.player;
           const action = btn.dataset.action;
 
@@ -5664,18 +5680,33 @@ async function sendDataToGoogleSheet(){
 
         // 수동 모드 액션 처리
         if(btn.parentElement?.id==='action-pad-actions'){
+          console.log('✅ 수동 모드 액션 실행:', {
+            action: btn.dataset.action,
+            playerName: window.state.modalState.actionPadPlayer
+          });
           const action = btn.dataset.action;
           const playerName = window.state.modalState.actionPadPlayer;
 
           if(!playerName) {
+            console.log('❌ 플레이어 선택되지 않음');
             showFeedback('플레이어를 선택해주세요.', true);
             return;
           }
 
           // 수동 모드에서 액션 실행
+          console.log('🚀 executePlayerAction 호출:', { playerName, action });
           executePlayerAction(playerName, action, btn);
           return;
         }
+
+        // 어떤 조건도 만족하지 않는 경우
+        console.log('⚠️ 처리되지 않은 버튼 클릭:', {
+          buttonId: btn.id,
+          parentId: btn.parentElement?.id,
+          hasDataPlayer: !!btn.dataset.player,
+          actionMode: window.actionOrderManager?.actionMode,
+          dataAction: btn.dataset.action
+        });
 
         // 기존 호환성을 위한 처리 (삭제 예정)
         if(btn.parentElement?.id==='action-pad-actions-legacy'){
