@@ -731,7 +731,7 @@
   // ========================================
   // 중앙 버전 관리 시스템
   // ========================================
-  const APP_VERSION = 'v3.4.21';
+  const APP_VERSION = 'v3.4.22';
   const VERSION_DATE = '2025-09-19';
   const VERSION_INFO = `포커 핸드 로거 ${APP_VERSION} (${VERSION_DATE})`;
 
@@ -4764,6 +4764,10 @@ async function sendDataToGoogleSheet(){
       console.log(`  → ${window.state.camPreset.cam2} 다음 번호: ${nextCam2}`);
       
       renderAll(); saveActionState();
+
+      // Ante 체크박스 상태 복원 (v3.4.22)
+      el.bbAnteCheckbox.checked = window.state.actionState.hasBBAnte;
+
       el.handNumberDisplay.textContent = `#${window.state.actionState.handNumber}`;
     }
     function showFeedback(msg,isErr=false){
