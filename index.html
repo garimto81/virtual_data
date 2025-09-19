@@ -731,7 +731,7 @@
   // ========================================
   // 중앙 버전 관리 시스템
   // ========================================
-  const APP_VERSION = 'v3.4.22';
+  const APP_VERSION = 'v3.4.23';
   const VERSION_DATE = '2025-09-19';
   const VERSION_INFO = `포커 핸드 로거 ${APP_VERSION} (${VERSION_DATE})`;
 
@@ -3308,6 +3308,10 @@
       const s=localStorage.getItem('phl_v46_state');
       if(s) window.state.actionState={...window.state.actionState, ...JSON.parse(s)};
       updateBlindButtons();
+      // Ante 체크박스 상태도 복원 (v3.4.23)
+      if(el.bbAnteCheckbox) {
+        el.bbAnteCheckbox.checked = window.state.actionState.hasBBAnte || false;
+      }
     }
 
     function updateBlindButtons() {
@@ -3319,6 +3323,17 @@
       }
       if(bigBlindBtn) {
         bigBlindBtn.textContent = formatNumber(window.state.actionState.bigBlind || '0');
+      }
+    }
+
+    // Ante 체크박스 상태 동기화 함수 (v3.4.23)
+    function syncAnteCheckbox() {
+      if(el.bbAnteCheckbox) {
+        const shouldBeChecked = window.state.actionState.hasBBAnte || false;
+        if(el.bbAnteCheckbox.checked !== shouldBeChecked) {
+          el.bbAnteCheckbox.checked = shouldBeChecked;
+          console.log(`Ante 체크박스 동기화: ${shouldBeChecked}`);
+        }
       }
     }
 
@@ -4143,7 +4158,9 @@
         el.handNumberDisplay.textContent = `#${handNumber}`;
         el.smallBlindInput.value = formatNumber(window.state.actionState.smallBlind);
         el.bigBlindInput.value = formatNumber(window.state.actionState.bigBlind);
-        el.bbAnteCheckbox.checked = window.state.actionState.hasBBAnte;
+
+        // Ante 체크박스 동기화 사용 (v3.4.23)
+        syncAnteCheckbox();
 
         // currentStreet 결정: Index에서 저장된 값 우선, 없으면 액션으로 판단
         const indexRow = window.state.indexRows.find(r => r.handNumber === String(handNumber));
@@ -4765,8 +4782,8 @@ async function sendDataToGoogleSheet(){
       
       renderAll(); saveActionState();
 
-      // Ante 체크박스 상태 복원 (v3.4.22)
-      el.bbAnteCheckbox.checked = window.state.actionState.hasBBAnte;
+      // Ante 체크박스 상태 동기화 (v3.4.23)
+      syncAnteCheckbox();
 
       el.handNumberDisplay.textContent = `#${window.state.actionState.handNumber}`;
     }
@@ -5545,7 +5562,13 @@ async function sendDataToGoogleSheet(){
           saveActionState();
         });
       });
-      el.bbAnteCheckbox.onchange = (e)=>{ window.state.actionState.hasBBAnte = e.target.checked; saveActionState(); renderAll(); };
+      // Ante 체크박스 이벤트 핸들러 개선 (v3.4.23)
+      el.bbAnteCheckbox.onchange = (e)=>{
+        window.state.actionState.hasBBAnte = e.target.checked;
+        saveActionState();
+        // renderAll() 제거하여 반응성 개선
+        console.log(`Ante 체크박스 상태 변경: ${e.target.checked}`);
+      };
 
       // Load Hand 모달 내부 클릭
       el.loadHandModal.addEventListener('click', (e)=>{

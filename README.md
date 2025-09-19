@@ -1,6 +1,6 @@
 # 🎰 Virtual Data - Poker Hand Logger
 
-> 실시간 포커 핸드 기록 및 분석 시스템 v3.4.22
+> 실시간 포커 핸드 기록 및 분석 시스템 v3.4.23
 
 ## 🌐 접속 링크
 - **GitHub 저장소**: https://github.com/garimto81/virtual_data
@@ -22,6 +22,11 @@ Google Sheets와 연동되는 웹 기반 포커 핸드 로거입니다. 실시�
 - ⚡ 모바일 최적화 - 터치/제스처/오프라인 지원 (v3.2.0 신기능)
 
 ## 📝 최근 업데이트
+
+### v3.4.23 (2025-09-19) - Ante 체크박스 반응성 개선
+- ⚡ **Ante 체크박스 반응성 향상**: renderAll() 제거로 즉각적인 반응
+- 🔧 **syncAnteCheckbox 함수 추가**: 체크박스 상태 동기화 중앙화
+- 🐞 **loadActionState 개선**: localStorage 로드 시 체크박스 상태 복원
 
 ### v3.4.22 (2025-09-19) - Ante 체크박스 상태 유지 버그 수정
 - 🐞 **Ante 체크박스 버그 수정**: 새 핸드 갱신 시 Ante 체크박스 상태가 유지되지 않던 문제 해결
