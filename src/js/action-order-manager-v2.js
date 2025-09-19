@@ -197,9 +197,14 @@ class ActionOrderManagerV2 {
      * @param {String} street - 현재 스트리트
      */
     getCurrentPlayer(street) {
-        const orderTable = street === 'preflop' ?
-            this.absoluteOrder.preflop :
-            this.absoluteOrder.postflop;
+        // 스트리트 정규화: flop/turn/river는 모두 postflop 순서 사용
+        const normalizedStreet = street === 'preflop' ? 'preflop' : 'postflop';
+        const orderTable = this.absoluteOrder[normalizedStreet];
+
+        if (!orderTable || orderTable.length === 0) {
+            console.error(`ActionOrderManagerV2: ${street} 순서 테이블이 없습니다.`);
+            return null;
+        }
 
         // 활성 플레이어만 필터링
         const activePlayers = orderTable.filter(p =>
@@ -211,8 +216,9 @@ class ActionOrderManagerV2 {
             return null;
         }
 
-        // 현재 인덱스의 플레이어 찾기
-        const currentIndex = this.currentActionIndex[street] % activePlayers.length;
+        // 현재 인덱스의 플레이어 찾기 (street별 인덱스 정규화)
+        const indexKey = street === 'preflop' ? 'preflop' : 'flop'; // postflop은 flop 인덱스 사용
+        const currentIndex = this.currentActionIndex[indexKey] % activePlayers.length;
         return activePlayers[currentIndex];
     }
 
@@ -221,7 +227,9 @@ class ActionOrderManagerV2 {
      * @param {String} street - 현재 스트리트
      */
     moveToNextPlayer(street) {
-        this.currentActionIndex[street]++;
+        // 스트리트별 인덱스 키 정규화
+        const indexKey = street === 'preflop' ? 'preflop' : 'flop';
+        this.currentActionIndex[indexKey]++;
 
         const nextPlayer = this.getCurrentPlayer(street);
         if (nextPlayer) {
@@ -259,7 +267,10 @@ class ActionOrderManagerV2 {
         console.log(`=== 스트리트 전환: ${this.currentStreet} → ${newStreet} ===`);
 
         this.currentStreet = newStreet;
-        this.currentActionIndex[newStreet] = 0;
+
+        // 스트리트별 액션 인덱스 초기화 (flop/turn/river는 flop 키 사용)
+        const indexKey = newStreet === 'preflop' ? 'preflop' : 'flop';
+        this.currentActionIndex[indexKey] = 0;
 
         // 새 스트리트의 첫 번째 플레이어
         const firstPlayer = this.getCurrentPlayer(newStreet);
@@ -275,9 +286,14 @@ class ActionOrderManagerV2 {
      * @param {String} street - 스트리트
      */
     getActionOrder(street) {
-        const orderTable = street === 'preflop' ?
-            this.absoluteOrder.preflop :
-            this.absoluteOrder.postflop;
+        // 스트리트 정규화: flop/turn/river는 모두 postflop 순서 사용
+        const normalizedStreet = street === 'preflop' ? 'preflop' : 'postflop';
+        const orderTable = this.absoluteOrder[normalizedStreet];
+
+        if (!orderTable || orderTable.length === 0) {
+            console.error(`ActionOrderManagerV2: ${street} 순서 테이블이 없습니다.`);
+            return [];
+        }
 
         return orderTable.map(p => ({
             ...p,

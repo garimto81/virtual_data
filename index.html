@@ -123,7 +123,7 @@
   <meta http-equiv="cache-control" content="no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="pragma" content="no-cache" />
   <meta http-equiv="expires" content="0" />
-  <title>포커 핸드 로거 v3.4.26</title>
+  <title>포커 핸드 로거 v3.4.27</title>
   <script src="https://cdn-tailwindcss.vercel.app/"></script>
   <script src="archive/chip-analysis-module.js?v=3.0.0" defer></script>
   <!-- 테이블 관리 모듈 v59 - IN/OUT 두 가지 상태만 사용 -->
@@ -767,7 +767,7 @@
   // ========================================
   // 중앙 버전 관리 시스템
   // ========================================
-  const APP_VERSION = 'v3.4.26';
+  const APP_VERSION = 'v3.4.27';
   const VERSION_DATE = '2025-09-19';
   const VERSION_INFO = `포커 핸드 로거 ${APP_VERSION} (${VERSION_DATE})`;
 
@@ -2663,7 +2663,27 @@
         window.actionOrderManager.getActionOrder(street) : [];
 
       const activePlayers = actionOrder.filter(p => p.canAct);
+
+      // 디버그 정보 추가
+      console.log('=== openActionPad 디버그 ===');
+      console.log('현재 스트리트:', street);
+      console.log('액션 순서:', actionOrder);
+      console.log('활성 플레이어:', activePlayers);
+      console.log('ActionOrderManager 상태:', window.actionOrderManager?.playerStatus);
+      console.log('전체 플레이어:', window.state.playersInHand);
+
       if(activePlayers.length === 0) {
+        // 추가 디버그 정보
+        console.error('베팅 가능한 플레이어 없음 - 상세 정보:');
+        console.error('- ActionOrderManager 초기화 여부:', !!window.actionOrderManager);
+        console.error('- HandNumber:', window.actionOrderManager?.handNumber);
+        console.error('- ButtonPosition:', window.actionOrderManager?.buttonPosition);
+
+        // ActionOrderManager 디버그 출력 시도
+        if (window.actionOrderManager && typeof window.actionOrderManager.debug === 'function') {
+          window.actionOrderManager.debug();
+        }
+
         showFeedback('베팅 가능한 플레이어가 없습니다.', true);
         return;
       }
@@ -4586,10 +4606,18 @@
 
         // ActionOrderManagerV2 초기화
         if (window.actionOrderManager && window.state.playersInHand.length > 0) {
-          // 버튼 위치 찾기
+          // 버튼 위치 찾기 (실제 시트 번호 사용)
           const buttonPlayer = window.state.playersInHand.find(p => p.role === 'BTN');
           const buttonPosition = buttonPlayer ?
-            window.state.playersInHand.indexOf(buttonPlayer) + 1 : 1;
+            parseInt(buttonPlayer.seat) || 1 :
+            parseInt(window.state.playersInHand[0]?.seat) || 1;
+
+          console.log('ActionOrderManager 초기화 시작:', {
+            playersCount: window.state.playersInHand.length,
+            buttonPosition,
+            buttonPlayer: buttonPlayer?.name,
+            handNumber: String(handNumber)
+          });
 
           window.actionOrderManager.initializeHand(
             window.state.playersInHand,
@@ -4598,6 +4626,11 @@
           );
 
           console.log('✅ ActionOrderManagerV2 초기화 완료');
+
+          // 디버그 출력
+          if (window.actionOrderManager.debug) {
+            window.actionOrderManager.debug();
+          }
         }
 
         renderAll(); saveActionState();
@@ -5152,6 +5185,27 @@ async function sendDataToGoogleSheet(){
       if (window.actionOrderManager) {
         window.actionOrderManager.endHand();
         console.log('✅ ActionOrderManagerV2 핸드 종료 및 리셋');
+      }
+
+      // 새 핸드 시작 시 ActionOrderManager 재초기화
+      if (window.actionOrderManager && window.state.playersInHand.length > 0) {
+        // 버튼 위치 찾기 (기본값: 첫 번째 플레이어의 시트)
+        const buttonPosition = parseInt(window.state.playersInHand[0]?.seat) || 1;
+        const handNumber = window.state.actionState.handNumber;
+
+        console.log('새 핸드 ActionOrderManager 초기화:', {
+          playersCount: window.state.playersInHand.length,
+          buttonPosition,
+          handNumber
+        });
+
+        window.actionOrderManager.initializeHand(
+          window.state.playersInHand,
+          buttonPosition,
+          String(handNumber)
+        );
+
+        console.log('✅ 새 핸드 ActionOrderManager 초기화 완료');
       }
 
       renderAll(); saveActionState();
