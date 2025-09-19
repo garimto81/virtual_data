@@ -123,7 +123,7 @@
   <meta http-equiv="cache-control" content="no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="pragma" content="no-cache" />
   <meta http-equiv="expires" content="0" />
-  <title>포커 핸드 로거 v3.4.34</title>
+  <title>포커 핸드 로거 v3.4.35</title>
   <script src="https://cdn-tailwindcss.vercel.app/"></script>
   <script src="archive/chip-analysis-module.js?v=3.0.0" defer></script>
   <!-- 테이블 관리 모듈 v59 - IN/OUT 두 가지 상태만 사용 -->
@@ -767,7 +767,7 @@
   // ========================================
   // 중앙 버전 관리 시스템
   // ========================================
-  const APP_VERSION = 'v3.4.34';
+  const APP_VERSION = 'v3.4.35';
   const VERSION_DATE = '2025-09-19';
   const VERSION_INFO = `포커 핸드 로거 ${APP_VERSION} (${VERSION_DATE})`;
 
@@ -2719,8 +2719,11 @@
 
       // 액션 큐 표시
       const queueDisplay = actionOrder.map((p, index) => {
-        const isCurrent = currentPlayer && p.name === currentPlayer.name;
-        const hasActed = (window.state.actionState[street] || []).some(a => a.player === p.name);
+        const playerName = p.name || p.player; // ActionOrder 객체는 player 속성 사용
+        const currentPlayerName = currentPlayer ? (currentPlayer.name || currentPlayer.player) : null;
+
+        const isCurrent = currentPlayer && playerName === currentPlayerName;
+        const hasActed = (window.state.actionState[street] || []).some(a => a.player === playerName);
 
         let statusIcon = '⏳';
         let statusClass = 'text-gray-400';
@@ -2733,7 +2736,7 @@
           statusClass = 'text-amber-400 animate-pulse';
         }
 
-        return `<span class="${statusClass}">${statusIcon} ${p.name}</span>`;
+        return `<span class="${statusClass}">${statusIcon} ${playerName}</span>`;
       }).join(' → ');
 
       // Check/Call 액션 결정 (현재 플레이어용)
@@ -2772,22 +2775,22 @@
         <div class="bg-gray-900 p-3 rounded mb-4">
           <div class="text-xs text-gray-400 mb-1">액션 순서:</div>
           <div class="text-sm">${queueDisplay}</div>
-          ${currentPlayer ? `<div class="text-xs text-amber-400 mt-2">현재 차례: ${currentPlayer.name}</div>` : ''}
+          ${currentPlayer ? `<div class="text-xs text-amber-400 mt-2">현재 차례: ${currentPlayer.name || currentPlayer.player}</div>` : ''}
         </div>
 
         <!-- 현재 플레이어 액션 버튼 -->
         ${currentPlayer && actionMode === 'auto' ? `
           <div class="mb-4">
-            <div class="text-center text-lg font-bold text-amber-400 mb-3">${currentPlayer.name}의 액션</div>
+            <div class="text-center text-lg font-bold text-amber-400 mb-3">${currentPlayer.name || currentPlayer.player}의 액션</div>
             <div id="current-player-actions" class="grid grid-cols-2 gap-2">
-              <button class="btn bg-red-600 hover:bg-red-700 p-3 rounded-md" data-action="Folds" data-player="${currentPlayer.name}">
+              <button class="btn bg-red-600 hover:bg-red-700 p-3 rounded-md" data-action="Folds" data-player="${currentPlayer.name || currentPlayer.player}">
                 ❌ Fold
               </button>
               ${checkCallButtonHTML}
-              <button class="btn bg-blue-600 hover:bg-blue-700 p-3 rounded-md" data-action="Bet/Raises" data-player="${currentPlayer.name}">
+              <button class="btn bg-blue-600 hover:bg-blue-700 p-3 rounded-md" data-action="Bet/Raises" data-player="${currentPlayer.name || currentPlayer.player}">
                 💰 Bet/Raise
               </button>
-              <button class="btn bg-red-800 hover:bg-red-900 font-bold p-3 rounded-md" data-action="All In" data-player="${currentPlayer.name}">
+              <button class="btn bg-red-800 hover:bg-red-900 font-bold p-3 rounded-md" data-action="All In" data-player="${currentPlayer.name || currentPlayer.player}">
                 🚀 ALL IN
               </button>
             </div>
@@ -2860,8 +2863,8 @@
         // 현재 플레이어 확인 (자동 모드)
         if (manager.actionMode === 'auto') {
           const currentPlayer = manager.getCurrentActionPlayer();
-          if (currentPlayer && currentPlayer.name !== playerName) {
-            console.log(`순서 밖 액션: ${playerName} (현재: ${currentPlayer.name})`);
+          if (currentPlayer && (currentPlayer.name || currentPlayer.player) !== playerName) {
+            console.log(`순서 밖 액션: ${playerName} (현재: ${currentPlayer.name || currentPlayer.player})`);
             // 그래도 허용
           }
         }
