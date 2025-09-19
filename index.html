@@ -123,7 +123,7 @@
   <meta http-equiv="cache-control" content="no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="pragma" content="no-cache" />
   <meta http-equiv="expires" content="0" />
-  <title>포커 핸드 로거 v3.4.10</title>
+  <title>포커 핸드 로거 v3.4.26</title>
   <script src="https://cdn-tailwindcss.vercel.app/"></script>
   <script src="archive/chip-analysis-module.js?v=3.0.0" defer></script>
   <!-- 테이블 관리 모듈 v59 - IN/OUT 두 가지 상태만 사용 -->
@@ -157,6 +157,35 @@
     .card-selector-btn.card-red { color: #DC2626; }
     .card-selector-btn.card-black { color: #111827; }
     .card-selector-btn.selected { border: 3px solid #FBBF24; transform: scale(0.95); }
+
+    /* 새로운 보드 카드 상태 스타일 */
+    .card-selector-btn[data-status="editable"] {
+      background: #FCD34D;
+      border: 2px solid #F59E0B;
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+    }
+    .card-selector-btn[data-status="locked"] {
+      background: #6B7280;
+      color: #9CA3AF;
+      border: 2px solid #374151;
+      cursor: not-allowed;
+      position: relative;
+    }
+    .card-selector-btn[data-status="locked"]:after {
+      content: '🔒';
+      position: absolute;
+      top: 1px;
+      right: 2px;
+      font-size: 10px;
+    }
+    .card-selector-btn[data-status="used"] {
+      background: #6B7280;
+      color: #9CA3AF;
+      cursor: not-allowed;
+    }
+    .card-selector-btn[data-status="available"]:hover {
+      background: #FEF3C7;
+    }
     .player-card.is-winner { background-color: rgba(251, 191, 36, 0.1); }
     select, input[type="text"] { font-size: 0.875rem; }
     .chip-color-sample { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #4B5563; cursor: pointer; }
@@ -738,7 +767,7 @@
   // ========================================
   // 중앙 버전 관리 시스템
   // ========================================
-  const APP_VERSION = 'v3.4.25';
+  const APP_VERSION = 'v3.4.26';
   const VERSION_DATE = '2025-09-19';
   const VERSION_INFO = `포커 핸드 로거 ${APP_VERSION} (${VERSION_DATE})`;
 
@@ -2216,110 +2245,405 @@
     function openModal(node, html){ node.innerHTML=html; node.classList.remove('hidden', 'opacity-0'); }
     function closeModal(node){ node.classList.add('hidden', 'opacity-0'); }
 
+    // 보드 카드 입력 규칙 정의
+    function getBoardCardRules(currentStreet) {
+      switch(currentStreet) {
+        case 'flop':
+          return {
+            selectable: [0, 1, 2, 3, 4],    // 플랍~리버 모두 선택 가능
+            editable: [0, 1, 2, 3, 4],      // 플랍~리버 모두 수정 가능
+            minCards: 3,                     // 최소 3장 (플랍)
+            maxCards: 5,                     // 최대 5장 (플랍+턴+리버)
+            title: '플랍 카드 선택 (3-5장)',
+            guide: '💡 플랍(3장) + 턴/리버(선택사항) 입력 가능'
+          };
+        case 'turn':
+          return {
+            selectable: [3],                 // 턴만 선택 가능
+            editable: [3],                   // 턴만 수정 가능
+            minCards: 0,                     // 턴 카드 삭제 가능
+            maxCards: 1,                     // 최대 1장
+            title: '턴 카드 선택 (0-1장)',
+            guide: '💡 턴 카드만 수정 가능 (플랍 카드는 잠금)'
+          };
+        case 'river':
+          return {
+            selectable: [4],                 // 리버만 선택 가능
+            editable: [4],                   // 리버만 수정 가능
+            minCards: 0,                     // 리버 카드 삭제 가능
+            maxCards: 1,                     // 최대 1장
+            title: '리버 카드 선택 (0-1장)',
+            guide: '💡 리버 카드만 수정 가능 (플랍/턴 카드는 잠금)'
+          };
+        default:
+          return {
+            selectable: [0, 1, 2, 3, 4],
+            editable: [0, 1, 2, 3, 4],
+            minCards: 0,
+            maxCards: 5,
+            title: '카드 선택',
+            guide: ''
+          };
+      }
+    }
+
+    // 카드 상태 분류 함수
+    function getBoardCardStatus(cardId, currentStreet) {
+      const rules = getBoardCardRules(currentStreet);
+      const currentBoard = window.state.board;
+
+      // 현재 편집 가능한 위치의 카드들만 selected로 처리
+      let editableCards = [];
+      rules.editable.forEach(index => {
+        if (currentBoard[index]) {
+          editableCards.push(currentBoard[index]);
+        }
+      });
+
+      // 1. 현재 수정 가능한 카드
+      if (editableCards.includes(cardId)) {
+        return {
+          status: 'editable',
+          class: 'bg-amber-300 border-2 border-amber-500',
+          disabled: false
+        };
+      }
+
+      // 2. 이전 스트리트 카드 (보기만 가능)
+      if (currentBoard.includes(cardId)) {
+        return {
+          status: 'locked',
+          class: 'bg-gray-500 text-gray-300 border-2 border-gray-400 cursor-not-allowed',
+          disabled: true,
+          tooltip: '이전 스트리트에서만 수정 가능'
+        };
+      }
+
+      // 3. 플레이어가 사용 중인 카드
+      const usedByPlayers = window.state.playersInHand.some(p =>
+        (p.hand || []).includes(cardId)
+      );
+      if (usedByPlayers) {
+        return {
+          status: 'used',
+          class: 'bg-gray-600 text-gray-400 cursor-not-allowed',
+          disabled: true,
+          tooltip: '다른 플레이어가 사용 중'
+        };
+      }
+
+      // 4. 선택 가능한 카드
+      return {
+        status: 'available',
+        class: 'bg-white hover:bg-amber-200',
+        disabled: false
+      };
+    }
+
     function openCardSelector(){
       const { target, player, index, count } = window.state.modalState.cardTarget;
-      
-      // 플랍에서는 5장까지 선택 가능하도록 수정
-      let maxCards = count;
-      let isFlop = false;
-      if(target === 'board' && count === 3) {
-        maxCards = 5; // 플랍에서는 최대 5장까지 선택 가능
-        isFlop = true;
+
+      // 보드 카드 백업 (취소 시 복원용)
+      window.state.boardBackup = [...window.state.board];
+
+      if (target === 'playerHand' && player) {
+        // 플레이어 핸드 선택 (기존 로직 유지)
+        openPlayerHandSelector(player, count);
+        return;
       }
-      
-      // 현재 선택된 카드들을 초기값으로 설정
+
+      if (target !== 'board') {
+        // 기타 카드 선택 (기존 로직 유지)
+        openGenericCardSelector(target, count);
+        return;
+      }
+
+      // === 보드 카드 선택 새 로직 ===
+      let currentStreet = 'flop';
+      if (index === 3) currentStreet = 'turn';
+      else if (index === 4) currentStreet = 'river';
+      else if (count === 3) currentStreet = 'flop';
+
+      const rules = getBoardCardRules(currentStreet);
+
+      // 백업 시스템 - 취소 시 복원용
+      const backupState = {
+        board: [...window.state.board],
+        timestamp: new Date().toISOString()
+      };
+      console.log(`보드 카드 선택 시작 - ${currentStreet} 모드, 백업 생성:`, backupState);
+
+      // 현재 편집 가능한 카드들을 selected로 설정
       let selected = [];
-      if(target === 'playerHand' && player) {
-        const p = window.state.playersInHand.find(p => p.name === player);
-        if(p && p.hand) selected = [...p.hand];
-      } else if(target === 'board') {
-        if(isFlop) { // flop - 모든 보드 카드 포함
-          selected = window.state.board.filter(Boolean);
-        } else if(index === 3) { // turn
-          if(window.state.board[3]) selected = [window.state.board[3]];
-        } else if(index === 4) { // river
-          if(window.state.board[4]) selected = [window.state.board[4]];
+      rules.editable.forEach(boardIndex => {
+        if (window.state.board[boardIndex]) {
+          selected.push(window.state.board[boardIndex]);
         }
-      }
-      
-      const used=[...window.state.playersInHand.flatMap(p=>p.hand||[]), ...window.state.board].filter(Boolean);
-      let deckHTML='';
-      Object.keys(SUITS).forEach(suitKey=>{
-        deckHTML+='<div class="flex justify-center gap-1 mb-1">';
-        RANKS.forEach(rank=>{
-          const id=`${rank}${suitKey}`;
-          // 다른 곳에서 사용 중인 카드 체크 (현재 대상 제외)
-          let usedByOthers = false;
-          const othersCards = [...window.state.playersInHand.flatMap(p => {
-            if(target === 'playerHand' && p.name === player) return []; // 현재 플레이어 제외
-            return p.hand || [];
-          })];
-          if(target !== 'board') {
-            othersCards.push(...window.state.board.filter(Boolean));
-          }
-          usedByOthers = othersCards.includes(id) && !selected.includes(id);
-          
-          const isSelected = selected.includes(id);
-          const color=(suitKey==='h'||suitKey==='d')?'card-red':'card-black';
-          const bgClass = isSelected ? 'bg-amber-300' : (usedByOthers ? 'bg-gray-600 text-gray-500' : 'bg-white hover:bg-amber-300');
-          const selectedClass = isSelected ? 'selected' : '';
-          
-          deckHTML+=`<button class="btn card-selector-btn rounded-md w-9 h-11 ${bgClass} ${color} ${selectedClass}" data-card-id="${id}" ${usedByOthers?'disabled':''}>${rank}${SUITS[suitKey]}</button>`;
-        });
-        deckHTML+='</div>';
       });
-      const html=`<div class="bg-gray-800 rounded-lg p-2 w-full max-w-md">
-        <h2 class="text-lg font-bold text-amber-400 mb-2 text-center">카드 선택 ${isFlop ? '(플랍/턴/리버)' : `(${count}장)`}</h2>
-        <div id="selected-cards" class="text-center mb-2 text-sm text-gray-300">선택된 카드: <span id="selected-count">${selected.length}</span>/${isFlop ? '3-5' : maxCards}</div>
+
+      // 현재 보드 상태 표시
+      const renderCurrentBoard = () => {
+        return window.state.board.map((card, idx) => {
+          if (!card) return `<div class="w-9 h-11 bg-gray-700 rounded border border-gray-600 text-xs flex items-center justify-center text-gray-500">${idx < 3 ? 'F' : idx === 3 ? 'T' : 'R'}</div>`;
+
+          const isEditable = rules.editable.includes(idx);
+          const borderClass = isEditable ? 'border-amber-500' : 'border-gray-400';
+          const bgClass = isEditable ? 'bg-amber-100' : 'bg-gray-200';
+
+          return `<div class="w-9 h-11 ${bgClass} rounded ${borderClass} border-2 text-xs flex items-center justify-center font-bold">${card}</div>`;
+        }).join('');
+      };
+
+      // 카드 덱 HTML 생성
+      let deckHTML = '';
+      Object.keys(SUITS).forEach(suitKey => {
+        deckHTML += '<div class="flex justify-center gap-1 mb-1">';
+        RANKS.forEach(rank => {
+          const id = `${rank}${suitKey}`;
+          const cardStatus = getBoardCardStatus(id, currentStreet);
+          const color = (suitKey === 'h' || suitKey === 'd') ? 'card-red' : 'card-black';
+
+          const tooltip = cardStatus.tooltip ? `title="${cardStatus.tooltip}"` : '';
+          deckHTML += `<button class="btn card-selector-btn rounded-md w-9 h-11 ${cardStatus.class} ${color}"
+                       data-card-id="${id}"
+                       data-status="${cardStatus.status}"
+                       ${cardStatus.disabled ? 'disabled' : ''}
+                       ${tooltip}>${rank}${SUITS[suitKey]}</button>`;
+        });
+        deckHTML += '</div>';
+      });
+
+      const html = `<div class="bg-gray-800 rounded-lg p-4 w-full max-w-md">
+        <h2 class="text-lg font-bold text-amber-400 mb-2 text-center">${rules.title}</h2>
+
+        <!-- 현재 보드 상태 표시 -->
+        <div class="bg-gray-900 p-2 rounded mb-3">
+          <div class="text-xs text-gray-400 mb-1">현재 보드:</div>
+          <div class="flex gap-1 justify-center">
+            ${renderCurrentBoard()}
+          </div>
+        </div>
+
+        <!-- 편집 가능 영역 안내 -->
+        <div class="text-xs text-blue-400 mb-2 text-center">
+          ${rules.guide}
+        </div>
+
+        <div id="selected-cards" class="text-center mb-2 text-sm text-gray-300">
+          선택된 카드: <span id="selected-count">${selected.length}</span>/${rules.maxCards}
+        </div>
+
+        <div id="card-deck">${deckHTML}</div>
+
+        <div class="flex gap-2 mt-3">
+          <button id="cancel-board" class="btn flex-1 bg-red-600 py-2 rounded-md">취소</button>
+          <button id="confirm-board" class="btn flex-1 bg-green-600 py-2 rounded-md">확인</button>
+        </div>
+      </div>`;
+      openModal(el.cardSelectorModal, html);
+
+      // 카드 수 업데이트 함수
+      const updateSelectedCount = () => {
+        const counter = el.cardSelectorModal.querySelector('#selected-count');
+        if(counter) counter.textContent = selected.length;
+      };
+
+      // 카드 클릭 이벤트 (새 로직)
+      el.cardSelectorModal.querySelector('#card-deck').onclick = e => {
+        const btn = e.target.closest('.card-selector-btn');
+        if (!btn) return;
+
+        const cardId = btn.dataset.cardId;
+        const cardStatus = btn.dataset.status;
+
+        // 비활성화된 카드 클릭 시 피드백
+        if (btn.disabled || cardStatus === 'locked' || cardStatus === 'used') {
+          const tooltip = btn.getAttribute('title');
+          if (tooltip) {
+            showFeedback(tooltip, true);
+          }
+          return;
+        }
+
+        const idx = selected.indexOf(cardId);
+
+        if (idx > -1) {
+          // 이미 선택된 카드 → 선택 해제
+          selected.splice(idx, 1);
+          btn.classList.remove('bg-amber-300', 'border-2', 'border-amber-500');
+          btn.classList.add('bg-white', 'hover:bg-amber-200');
+          btn.dataset.status = 'available';
+        } else {
+          // 새 카드 선택
+          if (selected.length < rules.maxCards) {
+            selected.push(cardId);
+            btn.classList.remove('bg-white', 'hover:bg-amber-200');
+            btn.classList.add('bg-amber-300', 'border-2', 'border-amber-500');
+            btn.dataset.status = 'editable';
+          } else {
+            showFeedback(`${rules.title}에서는 최대 ${rules.maxCards}장까지 선택 가능합니다.`, true);
+          }
+        }
+
+        updateSelectedCount();
+      };
+
+      // 확인 버튼 이벤트 (새 로직)
+      el.cardSelectorModal.querySelector('#confirm-board').onclick = () => {
+        // 카드 수 범위 검증
+        if (selected.length < rules.minCards) {
+          showFeedback(`${currentStreet}는 최소 ${rules.minCards}장을 선택해야 합니다.`, true);
+          return;
+        }
+        if (selected.length > rules.maxCards) {
+          showFeedback(`${currentStreet}는 최대 ${rules.maxCards}장까지 선택 가능합니다.`, true);
+          return;
+        }
+
+        // 중복 카드 검증
+        const uniqueCards = [...new Set(selected)];
+        if (uniqueCards.length !== selected.length) {
+          showFeedback('중복된 카드가 선택되었습니다. 다시 선택해주세요.', true);
+          return;
+        }
+
+        // 다른 위치의 카드와 중복 검증
+        const allUsedCards = [
+          ...Object.values(window.state.player1 || {}),
+          ...Object.values(window.state.player2 || {}),
+          ...Object.values(window.state.player3 || {}),
+          ...Object.values(window.state.player4 || {}),
+          ...window.state.board.filter((card, idx) => card && !rules.editable.includes(idx))
+        ].filter(Boolean);
+
+        const duplicateCards = selected.filter(card => allUsedCards.includes(card));
+        if (duplicateCards.length > 0) {
+          showFeedback(`이미 사용중인 카드입니다: ${duplicateCards.join(', ')}`, true);
+          return;
+        }
+
+        // 편집 가능 범위의 기존 카드 지우기
+        rules.editable.forEach(boardIndex => {
+          window.state.board[boardIndex] = null;
+        });
+
+        // 선택된 카드들을 순서대로 배치
+        let boardIndex = rules.editable[0];
+        selected.forEach(cardId => {
+          if (boardIndex <= rules.editable[rules.editable.length - 1]) {
+            window.state.board[boardIndex] = cardId;
+            boardIndex++;
+          }
+        });
+
+        // 백업 삭제
+        delete window.state.boardBackup;
+
+        closeModal(el.cardSelectorModal);
+        renderAll();
+        saveActionState();
+        showFeedback(`${rules.title.split(' ')[0]} 카드가 설정되었습니다.`);
+      };
+
+      // 취소 버튼 이벤트 (새 로직) - 백업 상태 복원
+      el.cardSelectorModal.querySelector('#cancel-board').onclick = () => {
+        console.log('보드 카드 선택 취소 - 백업 상태 복원');
+
+        // 백업 상태로 복원
+        window.state.board = [...backupState.board];
+
+        // 화면 업데이트
+        renderBoard();
+
+        console.log('복원 완료:', window.state.board);
+        closeModal(el.cardSelectorModal);
+      };
+    }
+
+    // 플레이어 핸드 선택 함수 (기존 로직 유지)
+    function openPlayerHandSelector(player, count) {
+      let selected = [];
+      const p = window.state.playersInHand.find(p => p.name === player);
+      if (p && p.hand) selected = [...p.hand];
+
+      const usedCards = [...window.state.playersInHand.flatMap(p => {
+        if (p.name === player) return []; // 현재 플레이어 제외
+        return p.hand || [];
+      }), ...window.state.board.filter(Boolean)];
+
+      let deckHTML = '';
+      Object.keys(SUITS).forEach(suitKey => {
+        deckHTML += '<div class="flex justify-center gap-1 mb-1">';
+        RANKS.forEach(rank => {
+          const id = `${rank}${suitKey}`;
+          const usedByOthers = usedCards.includes(id) && !selected.includes(id);
+          const isSelected = selected.includes(id);
+          const color = (suitKey === 'h' || suitKey === 'd') ? 'card-red' : 'card-black';
+          const bgClass = isSelected ? 'bg-amber-300' : (usedByOthers ? 'bg-gray-600 text-gray-500' : 'bg-white hover:bg-amber-300');
+
+          deckHTML += `<button class="btn card-selector-btn rounded-md w-9 h-11 ${bgClass} ${color}" data-card-id="${id}" ${usedByOthers ? 'disabled' : ''}>${rank}${SUITS[suitKey]}</button>`;
+        });
+        deckHTML += '</div>';
+      });
+
+      const html = `<div class="bg-gray-800 rounded-lg p-2 w-full max-w-md">
+        <h2 class="text-lg font-bold text-amber-400 mb-2 text-center">${player} 핸드 (${count}장)</h2>
+        <div id="selected-cards" class="text-center mb-2 text-sm text-gray-300">선택된 카드: <span id="selected-count">${selected.length}</span>/${count}</div>
         <div id="card-deck">${deckHTML}</div>
         <div class="flex gap-2 mt-2">
           <button id="close-card-modal" class="btn flex-1 bg-red-600 py-2 rounded-md">닫기</button>
           <button id="confirm-cards" class="btn flex-1 bg-green-600 py-2 rounded-md">확인</button>
         </div>
       </div>`;
+
       openModal(el.cardSelectorModal, html);
-      // 카드 선택 이벤트
+
       const updateSelectedCount = () => {
         const counter = el.cardSelectorModal.querySelector('#selected-count');
-        if(counter) counter.textContent = selected.length;
+        if (counter) counter.textContent = selected.length;
       };
-      
-      el.cardSelectorModal.querySelector('#card-deck').onclick=e=>{
-        const btn=e.target.closest('.card-selector-btn'); if(!btn) return;
-        const id=btn.dataset.cardId; const idx=selected.indexOf(id);
-        const { target, count } = window.state.modalState.cardTarget;
-        const isFlop = target === 'board' && count === 3;
-        const maxAllowed = isFlop ? 5 : count; // 플랍에서는 최대 5장까지
-        
-        if(idx>-1){ 
-          // 이미 선택된 카드를 다시 클릭하면 선택 해제
-          selected.splice(idx,1); 
-          btn.classList.remove('selected');
+
+      el.cardSelectorModal.querySelector('#card-deck').onclick = e => {
+        const btn = e.target.closest('.card-selector-btn');
+        if (!btn) return;
+        const id = btn.dataset.cardId;
+        const idx = selected.indexOf(id);
+
+        if (idx > -1) {
+          selected.splice(idx, 1);
           btn.classList.remove('bg-amber-300');
           btn.classList.add('bg-white', 'hover:bg-amber-300');
-        }
-        else if(selected.length<maxAllowed){ 
-          selected.push(id); 
-          btn.classList.add('selected');
+        } else if (selected.length < count) {
+          selected.push(id);
           btn.classList.remove('bg-white', 'hover:bg-amber-300');
           btn.classList.add('bg-amber-300');
         }
         updateSelectedCount();
       };
-      
-      // 확인 버튼 이벤트
-      el.cardSelectorModal.querySelector('#confirm-cards').onclick=()=>{
-        const { target, count } = window.state.modalState.cardTarget;
-        const isFlop = target === 'board' && count === 3;
-        
-        // 플랍에서는 최소 3장 필수
-        if(isFlop && selected.length > 0 && selected.length < 3) {
-          showFeedback('플랍은 최소 3장을 선택해야 합니다.', true);
-          return;
-        }
-        
-        // 카드가 없으면 제거, 있으면 할당
+
+      el.cardSelectorModal.querySelector('#confirm-cards').onclick = () => {
         assignCard(selected.length > 0 ? selected : null);
+      };
+
+      el.cardSelectorModal.querySelector('#close-card-modal').onclick = () => {
+        closeModal(el.cardSelectorModal);
+      };
+    }
+
+    // 기타 카드 선택 함수 (기존 로직 유지)
+    function openGenericCardSelector(target, count) {
+      const html = `<div class="bg-gray-800 rounded-lg p-2 w-full max-w-md">
+        <h2 class="text-lg font-bold text-amber-400 mb-2 text-center">카드 선택 (${count}장)</h2>
+        <p class="text-center text-gray-400">구현 필요: ${target}</p>
+        <div class="flex gap-2 mt-2">
+          <button id="close-card-modal" class="btn flex-1 bg-red-600 py-2 rounded-md">닫기</button>
+        </div>
+      </div>`;
+
+      openModal(el.cardSelectorModal, html);
+
+      el.cardSelectorModal.querySelector('#close-card-modal').onclick = () => {
+        closeModal(el.cardSelectorModal);
       };
     }
 
