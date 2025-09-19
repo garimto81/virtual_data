@@ -599,21 +599,6 @@ class ActionOrderManagerV2 {
 // 전역 인스턴스 생성
 window.actionOrderManager = new ActionOrderManagerV2();
 
-// 기존 actionManager와의 호환성 레이어
-window.actionManager = {
-    ...window.actionOrderManager,
-
-    // 호환성을 위한 별칭
-    calculateActionOrder(street) {
-        return this.getActionOrder(street);
-    },
-
-    getActivePlayers(players) {
-        return players.filter(p =>
-            window.state.playerStatus[p.name] !== 'folded' &&
-            window.state.playerStatus[p.name] !== 'allin'
-        );
-    }
-};
+// 기존 actionManager와의 호환성 레이어 제거됨 - 모든 곳에서 window.actionOrderManager 사용
 
 console.log('✅ ActionOrderManagerV2 로드 완료');
