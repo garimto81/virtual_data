@@ -610,7 +610,8 @@ window.actionManager = {
 
     getActivePlayers(players) {
         return players.filter(p =>
-            this.playerStatus[p.name] === 'active'
+            window.state.playerStatus[p.name] !== 'folded' &&
+            window.state.playerStatus[p.name] !== 'allin'
         );
     }
 };
