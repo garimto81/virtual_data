@@ -123,7 +123,7 @@
   <meta http-equiv="cache-control" content="no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="pragma" content="no-cache" />
   <meta http-equiv="expires" content="0" />
-  <title>포커 핸드 로거 v3.4.41-debug</title>
+  <title>포커 핸드 로거 v3.4.42-debug</title>
   <script src="https://cdn-tailwindcss.vercel.app/"></script>
   <script src="archive/chip-analysis-module.js?v=3.0.0" defer></script>
   <!-- 테이블 관리 모듈 v59 - IN/OUT 두 가지 상태만 사용 -->
@@ -767,7 +767,7 @@
   // ========================================
   // 중앙 버전 관리 시스템
   // ========================================
-  const APP_VERSION = 'v3.4.41-debug';
+  const APP_VERSION = 'v3.4.42-debug';
   const VERSION_DATE = '2025-09-19';
   const VERSION_INFO = `포커 핸드 로거 ${APP_VERSION} (${VERSION_DATE})`;
 
@@ -5608,7 +5608,9 @@ async function sendDataToGoogleSheet(){
           className: btn.className,
           dataset: btn.dataset,
           parentId: btn.parentElement?.id,
-          actionMode: window.actionOrderManager?.actionMode
+          actionMode: window.actionOrderManager?.actionMode,
+          actionOrderManagerExists: !!window.actionOrderManager,
+          actionOrderManagerType: typeof window.actionOrderManager
         });
 
         // 닫기 버튼
@@ -5634,8 +5636,8 @@ async function sendDataToGoogleSheet(){
           return;
         }
 
-        // 자동 모드에서 현재 플레이어 액션
-        if(btn.dataset.player && window.actionOrderManager?.actionMode === 'auto') {
+        // 자동 모드에서 현재 플레이어 액션 (current-player-actions 또는 data-player 속성)
+        if(btn.dataset.player && (window.actionOrderManager?.actionMode === 'auto' || btn.parentElement?.id === 'current-player-actions')) {
           console.log('✅ 자동 모드 액션 실행:', {
             player: btn.dataset.player,
             action: btn.dataset.action
@@ -5678,14 +5680,21 @@ async function sendDataToGoogleSheet(){
           return;
         }
 
-        // 수동 모드 액션 처리
-        if(btn.parentElement?.id==='action-pad-actions'){
+        // 수동 모드 액션 처리 (action-pad-actions 또는 current-player-actions)
+        if(btn.parentElement?.id==='action-pad-actions' || btn.parentElement?.id==='current-player-actions'){
           console.log('✅ 수동 모드 액션 실행:', {
             action: btn.dataset.action,
-            playerName: window.state.modalState.actionPadPlayer
+            playerName: window.state.modalState.actionPadPlayer,
+            dataPlayer: btn.dataset.player
           });
           const action = btn.dataset.action;
-          const playerName = window.state.modalState.actionPadPlayer;
+          let playerName = window.state.modalState.actionPadPlayer;
+
+          // current-player-actions의 경우 data-player 속성에서 플레이어 이름 가져오기
+          if(!playerName && btn.dataset.player) {
+            playerName = btn.dataset.player;
+            window.state.modalState.actionPadPlayer = playerName;
+          }
 
           if(!playerName) {
             console.log('❌ 플레이어 선택되지 않음');
