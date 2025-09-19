@@ -35,11 +35,17 @@ class ActionOrderManagerV2 {
     /**
      * 새 핸드 시작 - 절대 순위 테이블 생성
      * @param {Array} playersInHand - 핸드 참여 플레이어 목록
-     * @param {Number} buttonPosition - 버튼 위치
+     * @param {Number} buttonPosition - 버튼 위치 (선택사항)
      * @param {String} handNumber - 핸드 번호
      */
     initializeHand(playersInHand, buttonPosition, handNumber) {
         console.log(`=== 핸드 #${handNumber} 절대 순위 초기화 ===`);
+        console.log('초기화 파라미터:', {
+            playersCount: playersInHand.length,
+            players: playersInHand.map(p => `${p.name}(seat:${p.seat})`),
+            buttonPosition,
+            handNumber
+        });
 
         this.handNumber = handNumber;
         this.buttonPosition = buttonPosition;
@@ -58,11 +64,24 @@ class ActionOrderManagerV2 {
             river: 0
         };
 
-        // 절대 순위 테이블 생성
-        this.absoluteOrder = {
-            preflop: this.createPreflopOrder(playersInHand, buttonPosition),
-            postflop: this.createPostflopOrder(playersInHand, buttonPosition)
-        };
+        // 버튼 위치 검증 및 순서 생성 방식 결정
+        const hasValidButtonPosition = this.validateButtonPosition(playersInHand, buttonPosition);
+
+        if (hasValidButtonPosition) {
+            console.log('✅ 버튼 위치 기반 포지션 순서 생성');
+            // 절대 순위 테이블 생성 (포지션 기반)
+            this.absoluteOrder = {
+                preflop: this.createPreflopOrder(playersInHand, buttonPosition),
+                postflop: this.createPostflopOrder(playersInHand, buttonPosition)
+            };
+        } else {
+            console.log('⚡ 선택 순서 기반 절대 위치 생성');
+            // 절대 순위 테이블 생성 (선택 순서 기반)
+            this.absoluteOrder = {
+                preflop: this.createSequentialOrder(playersInHand, 'preflop'),
+                postflop: this.createSequentialOrder(playersInHand, 'postflop')
+            };
+        }
 
         console.log('프리플랍 순서:', this.absoluteOrder.preflop.map(p =>
             `${p.position}(${p.player})`).join(' → '));
@@ -73,23 +92,145 @@ class ActionOrderManagerV2 {
     }
 
     /**
-     * 프리플랍 절대 순위 생성
+     * 버튼 위치 유효성 검증
+     * @param {Array} players - 플레이어 목록
+     * @param {Number} buttonPosition - 버튼 위치
+     */
+    validateButtonPosition(players, buttonPosition) {
+        if (!buttonPosition || !players.length) {
+            return false;
+        }
+
+        // 플레이어들의 실제 시트 번호 수집 (문자열/숫자 혼용 대응)
+        const playerSeats = players
+            .map(p => parseInt(p.seat))
+            .filter(seat => !isNaN(seat));
+
+        const buttonSeat = parseInt(buttonPosition);
+        const hasValidButton = playerSeats.includes(buttonSeat);
+
+        console.log('버튼 위치 검증:', {
+            buttonPosition: buttonSeat,
+            playerSeats,
+            isValid: hasValidButton
+        });
+
+        return hasValidButton;
+    }
+
+    /**
+     * 선택 순서 기반 절대 위치 생성
+     * @param {Array} players - 플레이어 목록
+     * @param {String} type - 'preflop' 또는 'postflop'
+     */
+    createSequentialOrder(players, type) {
+        const order = [];
+
+        if (type === 'preflop') {
+            // 프리플랍: 첫 번째 선택된 플레이어부터 UTG 순서로 액션
+            players.forEach((player, index) => {
+                const position = this.getSequentialPreflopPosition(index, players.length);
+                order.push({
+                    player: player.name,
+                    seat: player.seat,
+                    position: position,
+                    priority: index
+                });
+            });
+        } else {
+            // 포스트플랍: 첫 번째 선택된 플레이어부터 액션 (SB 순서)
+            players.forEach((player, index) => {
+                const position = this.getSequentialPostflopPosition(index, players.length);
+                order.push({
+                    player: player.name,
+                    seat: player.seat,
+                    position: position,
+                    priority: index
+                });
+            });
+        }
+
+        console.log(`${type} 선택 순서 기반 생성:`, order);
+        return order;
+    }
+
+    /**
+     * 순차 프리플랍 포지션 할당
+     */
+    getSequentialPreflopPosition(index, totalPlayers) {
+        if (totalPlayers === 2) {
+            return index === 0 ? 'SB/BTN' : 'BB';
+        }
+        if (totalPlayers === 3) {
+            return ['BTN', 'SB', 'BB'][index] || `P${index + 1}`;
+        }
+        if (totalPlayers === 4) {
+            return ['BTN', 'SB', 'BB', 'UTG'][index] || `P${index + 1}`;
+        }
+        if (totalPlayers === 5) {
+            return ['BTN', 'SB', 'BB', 'UTG', 'CO'][index] || `P${index + 1}`;
+        }
+        if (totalPlayers >= 6) {
+            return ['BTN', 'SB', 'BB', 'UTG', 'UTG+1', 'MP', 'CO'][index] || `P${index + 1}`;
+        }
+        return `P${index + 1}`;
+    }
+
+    /**
+     * 순차 포스트플랍 포지션 할당
+     */
+    getSequentialPostflopPosition(index, totalPlayers) {
+        if (totalPlayers === 2) {
+            return index === 0 ? 'SB/BTN' : 'BB';
+        }
+        // 포스트플랍은 SB부터 시작하므로 순서 조정
+        if (totalPlayers === 3) {
+            return ['SB', 'BB', 'BTN'][index] || `P${index + 1}`;
+        }
+        if (totalPlayers === 4) {
+            return ['SB', 'BB', 'UTG', 'BTN'][index] || `P${index + 1}`;
+        }
+        if (totalPlayers === 5) {
+            return ['SB', 'BB', 'UTG', 'CO', 'BTN'][index] || `P${index + 1}`;
+        }
+        if (totalPlayers >= 6) {
+            return ['SB', 'BB', 'UTG', 'UTG+1', 'MP', 'CO', 'BTN'][index] || `P${index + 1}`;
+        }
+        return `P${index + 1}`;
+    }
+
+    /**
+     * 프리플랍 절대 순위 생성 (포지션 기반)
      */
     createPreflopOrder(players, buttonPosition) {
         const order = [];
         const seatMap = new Map();
 
+        // 시트 번호를 숫자로 정규화하여 저장
         players.forEach(p => {
-            seatMap.set(p.seat, p);
+            const normalizedSeat = parseInt(p.seat);
+            if (!isNaN(normalizedSeat)) {
+                seatMap.set(normalizedSeat, p);
+            }
         });
 
         const occupiedSeats = Array.from(seatMap.keys()).sort((a, b) => a - b);
         const totalPlayers = occupiedSeats.length;
+        const normalizedButtonPosition = parseInt(buttonPosition);
+
+        console.log('프리플랍 순서 생성:', {
+            occupiedSeats,
+            buttonPosition: normalizedButtonPosition,
+            totalPlayers
+        });
 
         // 버튼 위치 찾기
-        const btnIndex = occupiedSeats.indexOf(buttonPosition);
+        const btnIndex = occupiedSeats.indexOf(normalizedButtonPosition);
         if (btnIndex === -1) {
-            console.error('버튼 위치를 찾을 수 없음');
+            console.error('프리플랍: 버튼 위치를 찾을 수 없음', {
+                buttonPosition: normalizedButtonPosition,
+                occupiedSeats
+            });
             return order;
         }
 
@@ -150,17 +291,31 @@ class ActionOrderManagerV2 {
         const order = [];
         const seatMap = new Map();
 
+        // 시트 번호를 숫자로 정규화하여 저장
         players.forEach(p => {
-            seatMap.set(p.seat, p);
+            const normalizedSeat = parseInt(p.seat);
+            if (!isNaN(normalizedSeat)) {
+                seatMap.set(normalizedSeat, p);
+            }
         });
 
         const occupiedSeats = Array.from(seatMap.keys()).sort((a, b) => a - b);
         const totalPlayers = occupiedSeats.length;
+        const normalizedButtonPosition = parseInt(buttonPosition);
+
+        console.log('포스트플랍 순서 생성:', {
+            occupiedSeats,
+            buttonPosition: normalizedButtonPosition,
+            totalPlayers
+        });
 
         // 버튼 위치 찾기
-        const btnIndex = occupiedSeats.indexOf(buttonPosition);
+        const btnIndex = occupiedSeats.indexOf(normalizedButtonPosition);
         if (btnIndex === -1) {
-            console.error('버튼 위치를 찾을 수 없음');
+            console.error('포스트플랍: 버튼 위치를 찾을 수 없음', {
+                buttonPosition: normalizedButtonPosition,
+                occupiedSeats
+            });
             return order;
         }
 
