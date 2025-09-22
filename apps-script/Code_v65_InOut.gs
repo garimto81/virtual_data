@@ -29,41 +29,38 @@
  * - sortSheet 이중 호출 버그 수정
  * - 일괄 업데이트 시 자동 정렬
  *
- * Type 시트 구조:
- * A: Camera Preset
- * B: Player
- * C: Table
- * D: Notable
- * E: Chips
- * F: UpdatedAt
- * G: Seat
- * H: Status (IN/OUT만 사용)
+ * Type 시트 구조 (v66 - 새 구조):
+ * A: Player
+ * B: Table
+ * C: Notable
+ * D: Chips
+ * E: UpdatedAt
+ * F: Seat
+ * G: Status (IN/OUT만 사용)
  ****************************************************/
 
 const SHEET_ID = '1J-lf8bYTLPbpdhieUNdb8ckW_uwdQ3MtSBLmyRIwH7U';
 
 // Type 시트 열 인덱스 (0-based for array)
 const TYPE_COLUMNS = {
-  CAMERA: 0,      // A열
-  PLAYER: 1,      // B열
-  TABLE: 2,       // C열
-  NOTABLE: 3,     // D열
-  CHIPS: 4,       // E열
-  UPDATED_AT: 5,  // F열
-  SEAT: 6,        // G열
-  STATUS: 7       // H열 - IN/OUT만 사용
+  PLAYER: 0,      // A열 - Player
+  TABLE: 1,       // B열 - Table
+  NOTABLE: 2,     // C열 - Notable
+  CHIPS: 3,       // D열 - Chips
+  UPDATED_AT: 4,  // E열 - UpdatedAt
+  SEAT: 5,        // F열 - Seat
+  STATUS: 6       // G열 - Status (IN/OUT만 사용)
 };
 
 // Range용 (1-based)
 const RANGE_COLUMNS = {
-  CAMERA: 1,
-  PLAYER: 2,
-  TABLE: 3,
-  NOTABLE: 4,
-  CHIPS: 5,
-  UPDATED_AT: 6,
-  SEAT: 7,
-  STATUS: 8
+  PLAYER: 1,      // A열
+  TABLE: 2,       // B열
+  NOTABLE: 3,     // C열
+  CHIPS: 4,       // D열
+  UPDATED_AT: 5,  // E열
+  SEAT: 6,        // F열
+  STATUS: 7       // G열
 };
 
 // ===== 유틸리티 함수 =====
@@ -390,9 +387,8 @@ function addPlayer(playerData) {
       }
     }
 
-    // 새 행 추가
+    // 새 행 추가 (새 구조: A:Player, B:Table, C:Notable, D:Chips, E:UpdatedAt, F:Seat, G:Status)
     const newRow = sheet.getLastRow() + 1;
-    sheet.getRange(newRow, RANGE_COLUMNS.CAMERA).setValue('');
     sheet.getRange(newRow, RANGE_COLUMNS.PLAYER).setValue(playerData.name);
     sheet.getRange(newRow, RANGE_COLUMNS.TABLE).setValue(playerData.table);
     sheet.getRange(newRow, RANGE_COLUMNS.NOTABLE).setValue('FALSE');
@@ -488,7 +484,7 @@ function updatePlayerChips(playerName, tableName, newChips) {
     const newRow = sheet.getLastRow() + 1;
     const timestamp = new Date();
 
-    sheet.getRange(newRow, RANGE_COLUMNS.CAMERA).setValue(''); // 기본값
+    // 새 구조: A:Player, B:Table, C:Notable, D:Chips, E:UpdatedAt, F:Seat, G:Status
     sheet.getRange(newRow, RANGE_COLUMNS.PLAYER).setValue(playerName);
     sheet.getRange(newRow, RANGE_COLUMNS.TABLE).setValue(tableName);
     sheet.getRange(newRow, RANGE_COLUMNS.NOTABLE).setValue('');
@@ -587,10 +583,9 @@ function batchUpdatePlayers(tableName, playersJson, deletedJson) {
         }
       }
 
-      // 새 플레이어 추가
+      // 새 플레이어 추가 (새 구조: A:Player, B:Table, C:Notable, D:Chips, E:UpdatedAt, F:Seat, G:Status)
       if (!found) {
         const newRow = sheet.getLastRow() + 1;
-        sheet.getRange(newRow, RANGE_COLUMNS.CAMERA).setValue('');
         sheet.getRange(newRow, RANGE_COLUMNS.PLAYER).setValue(player.name);
         sheet.getRange(newRow, RANGE_COLUMNS.TABLE).setValue(tableName);
         sheet.getRange(newRow, RANGE_COLUMNS.NOTABLE).setValue(player.notable ? 'TRUE' : 'FALSE');

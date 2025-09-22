@@ -2,10 +2,17 @@
 <!--
   ============================================
   포커 핸드 로거 (Poker Hand Logger)
-  Version: 3.4.25
-  Last Modified: 2025-09-19 KST
+  Version: 3.4.26
+  Last Modified: 2025-09-22 KST
 
   Change Log:
+  - v3.4.26 (2025-09-22): Type 시트 구조 변경 대응 및 Camera Preset 로직 제거
+    • Type 시트 새 구조: A:Player, B:Table, C:Notable, D:Chips, E:UpdatedAt, F:Seat, G:Status
+    • Camera Preset 처리 로직 완전 제거 (기본값으로 변경)
+    • buildTypeFromCsv() 함수 칼럼 매핑 업데이트
+    • Apps Script v66 상수 업데이트 (TYPE_COLUMNS, RANGE_COLUMNS)
+    • DuplicateRemover 칼럼 인덱스 수정
+    • updatePlayerChips, batchUpdatePlayers, addPlayer 함수 구조 변경
   - v3.4.25 (2025-09-19): ActionOrderManagerV2 완전 통합
     • 기존 ActionOrderManager 제거
     • 절대 순위 시스템으로 전면 교체
@@ -767,8 +774,8 @@
   // ========================================
   // 중앙 버전 관리 시스템
   // ========================================
-  const APP_VERSION = 'v3.4.42-debug';
-  const VERSION_DATE = '2025-09-19';
+  const APP_VERSION = 'v3.4.26';
+  const VERSION_DATE = '2025-09-22';
   const VERSION_INFO = `포커 핸드 로거 ${APP_VERSION} (${VERSION_DATE})`;
 
   // ========================================
@@ -4151,52 +4158,52 @@
     }
 
     function buildTypeFromCsv(rows){
-      // Type 시트 구조:
-      // A:Camera Preset, B:Player, C:Table, D:Notable, E:Chips, F:updatedAt, G:Seat
-      // A2: Cam1 name, A3: Cam2 name (카메라 프리셋 정보)
+      // Type 시트 구조 (v3.4.26 - 새 구조):
+      // A:Player, B:Table, C:Notable, D:Chips, E:updatedAt, F:Seat, G:Status
       if(!rows||rows.length<1) return;
       const header=rows[0];
-      const A2=(rows[1]&&rows[1][0])?String(rows[1][0]).trim():'';
-      const A3=(rows[2]&&rows[2][0])?String(rows[2][0]).trim():'';
-      window.state.camPreset.cam1=A2||'Cam1';
-      window.state.camPreset.cam2=A3||'Cam2';
+
+      // 카메라 프리셋 기본값 설정 (Type 시트에서 제거됨)
+      window.state.camPreset.cam1 = 'Cam1';
+      window.state.camPreset.cam2 = 'Cam2';
+
       // localStorage에서 마지막 카메라 번호 읽어서 표시
       const lastCam1No = localStorage.getItem('pokerHandLogger_lastCam1');
       const lastCam2No = localStorage.getItem('pokerHandLogger_lastCam2');
-      
-      console.log(`🎞️ 카메라 버튼 초기화:`);
-      console.log(`  ${window.state.camPreset.cam1} 저장된 번호: ${lastCam1No || '없음'}`);
-      console.log(`  ${window.state.camPreset.cam2} 저장된 번호: ${lastCam2No || '없음'}`);
-      
+
+      console.log(`🎞️ 카메라 버튼 초기화 (기본값):`);
+      console.log(`  Cam1 저장된 번호: ${lastCam1No || '없음'}`);
+      console.log(`  Cam2 저장된 번호: ${lastCam2No || '없음'}`);
+
       if(lastCam1No) {
         const nextNo = parseInt(lastCam1No, 10) + 1;
-        el.cam1.textContent = `${window.state.camPreset.cam1}${pad4(nextNo)}`;
-        console.log(`  → ${window.state.camPreset.cam1} 표시: ${pad4(nextNo)}`);
+        el.cam1.textContent = `Cam1${pad4(nextNo)}`;
+        console.log(`  → Cam1 표시: ${pad4(nextNo)}`);
       } else {
-        el.cam1.textContent = `${window.state.camPreset.cam1}0001`;
-        console.log(`  → ${window.state.camPreset.cam1} 표시: 0001 (초기값)`);
+        el.cam1.textContent = `Cam10001`;
+        console.log(`  → Cam1 표시: 0001 (초기값)`);
       }
-      
+
       if(lastCam2No) {
         const nextNo = parseInt(lastCam2No, 10) + 1;
-        el.cam2.textContent = `${window.state.camPreset.cam2}${pad4(nextNo)}`;
-        console.log(`  → ${window.state.camPreset.cam2} 표시: ${pad4(nextNo)}`);
+        el.cam2.textContent = `Cam2${pad4(nextNo)}`;
+        console.log(`  → Cam2 표시: ${pad4(nextNo)}`);
       } else {
-        el.cam2.textContent = `${window.state.camPreset.cam2}0001`;
-        console.log(`  → ${window.state.camPreset.cam2} 표시: 0001 (초기값)`);
+        el.cam2.textContent = `Cam20001`;
+        console.log(`  → Cam2 표시: 0001 (초기값)`);
       }
 
       const byTable={};
       for(let i=1;i<rows.length;i++){
         const r=rows[i]||[];
-        // A:Camera Preset, B:Player, C:Table, D:Notable, E:Chips, F:updatedAt, G:Seat, H:Status
-        const player=String(r[1]||'').trim();
-        const table =String(r[2]||'').trim();
-        const notable = String(r[3]||'').toUpperCase()==='TRUE';
-        const chips = String(r[4]!=null?r[4]:'0').trim();
-        const updatedAt = String(r[5]||'').trim(); // F열: updatedAt
-        const seat = String(r[6]||'').trim(); // G열: Seat
-        const status = String(r[7]||'IN').trim().toUpperCase(); // H열: Status (기본값: IN)
+        // 새 구조: A:Player, B:Table, C:Notable, D:Chips, E:updatedAt, F:Seat, G:Status
+        const player=String(r[0]||'').trim();   // A열: Player
+        const table =String(r[1]||'').trim();   // B열: Table
+        const notable = String(r[2]||'').toUpperCase()==='TRUE'; // C열: Notable
+        const chips = String(r[3]!=null?r[3]:'0').trim(); // D열: Chips
+        const updatedAt = String(r[4]||'').trim(); // E열: updatedAt
+        const seat = String(r[5]||'').trim(); // F열: Seat
+        const status = String(r[6]||'IN').trim().toUpperCase(); // G열: Status
 
         console.log(`[v3.4.3] 플레이어 처리: ${player} (${table}) - 상태: ${status}`);
 

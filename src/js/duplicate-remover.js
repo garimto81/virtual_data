@@ -129,12 +129,13 @@ async function analyzeRawCsvData(csvData) {
             const line = lines[i];
             const columns = line.split(',').map(col => col.trim().replace(/"/g, ''));
 
-            if (columns.length < 8) continue; // 최소 8개 컬럼 필요
+            if (columns.length < 7) continue; // 최소 7개 컬럼 필요
 
-            const player = columns[0] || '';
-            const table = columns[1] || '';
-            const seat = columns[6] || '';
-            const status = (columns[7] || 'IN').toUpperCase();
+            // 새 구조: A:Player, B:Table, C:Notable, D:Chips, E:UpdatedAt, F:Seat, G:Status
+            const player = columns[0] || '';  // A열: Player
+            const table = columns[1] || '';   // B열: Table
+            const seat = columns[5] || '';    // F열: Seat
+            const status = (columns[6] || 'IN').toUpperCase(); // G열: Status
 
             // IN 상태인 플레이어만 처리
             if (player && table && status === 'IN') {

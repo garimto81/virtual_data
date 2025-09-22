@@ -14,25 +14,23 @@
 const SHEET_ID = '1J-lf8bYTLPbpdhieUNdb8ckW_uwdQ3MtSBLmyRIwH7U';
 
 const TYPE_COLUMNS = {
-  CAMERA: 0,
-  PLAYER: 1,
-  TABLE: 2,
-  NOTABLE: 3,
-  CHIPS: 4,
-  UPDATED_AT: 5,
-  SEAT: 6,
-  STATUS: 7
+  PLAYER: 0,      // A열 - Player
+  TABLE: 1,       // B열 - Table
+  NOTABLE: 2,     // C열 - Notable
+  CHIPS: 3,       // D열 - Chips
+  UPDATED_AT: 4,  // E열 - UpdatedAt
+  SEAT: 5,        // F열 - Seat
+  STATUS: 6       // G열 - Status
 };
 
 const RANGE_COLUMNS = {
-  CAMERA: 1,
-  PLAYER: 2,
-  TABLE: 3,
-  NOTABLE: 4,
-  CHIPS: 5,
-  UPDATED_AT: 6,
-  SEAT: 7,
-  STATUS: 8
+  PLAYER: 1,      // A열
+  TABLE: 2,       // B열
+  NOTABLE: 3,     // C열
+  CHIPS: 4,       // D열
+  UPDATED_AT: 5,  // E열
+  SEAT: 6,        // F열
+  STATUS: 7       // G열
 };
 
 // ===== 최적화된 중복 제거 시스템 =====
